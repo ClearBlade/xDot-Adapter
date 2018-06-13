@@ -143,14 +143,6 @@ func main() {
 	endWorkersChannel = make(chan string)
 	done := make(chan bool)
 
-	//We need to wait until the MQTT subscription is complete
-	// for cbSubscribeChannel == nil {
-	// 	time.Sleep(500 * time.Millisecond)
-	// }
-
-	//Start subscribe worker
-	//subscribeWorker()
-
 	<-done
 }
 
@@ -162,7 +154,7 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	for err := cbBroker.client.Authenticate(); err != nil; {
 		log.Printf("[ERROR] initCbClient - Error authenticating %s: %s\n", platformBroker.name, err.Error())
-		log.Println("[INFO] initCbClient - Will retry in 1 minute...")
+		log.Println("[ERROR] initCbClient - Will retry in 1 minute...")
 
 		// sleep 1 minute
 		time.Sleep(time.Duration(time.Minute * 1))

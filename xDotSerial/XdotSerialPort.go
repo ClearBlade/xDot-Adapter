@@ -41,7 +41,7 @@ func (xDot *XdotSerialPort) OpenSerialPort() error {
 		log.Println("[ERROR] OpenSerialPort - Error opening serial port: " + err.Error())
 		return err
 	}
-	log.Printf("[DEBUG] xDot.serialPort - %#v\n", xDot.serialPort)
+
 	log.Println("[INFO] OpenSerialPort - Serial port open")
 
 	return nil
@@ -63,8 +63,7 @@ func (xDot *XdotSerialPort) SendATCommand(cmd string) (string, error) {
 	atCmd := cmd + "\r"
 
 	//write to the serial port
-	log.Println("[DEBUG] SendATCommand - Writing AT Command to serial port")
-	log.Printf("[DEBUG] SendATCommand - AT Command: %#v\n", atCmd)
+	log.Printf("[DEBUG] SendATCommand - Writing AT Command to serial port: %#v\n", atCmd)
 
 	n, err := xDot.serialPort.Write([]byte(atCmd))
 	if err != nil {
@@ -460,14 +459,12 @@ func (xDot *XdotSerialPort) StartSerialDataMode() error {
 func (xDot *XdotSerialPort) StopSerialDataMode() error {
 	log.Println("[DEBUG] StopSerialDataMode - Stopping serial data mode")
 
-	//Flush serial port before attempting to exit serial data mode
-	// if err := xDot.FlushSerialPort(); err != nil {
-	// 	log.Println("[ERROR] subscribeWorker - Error flushing serial port: " + err.Error())
-	// }
-
 	err := errors.New("")
 	for err != nil {
-		log.Println("[Info] StopSerialDataMode - In loop")
+		//Flush serial port before attempting to exit serial data mode
+		if err := xDot.FlushSerialPort(); err != nil {
+			log.Println("[ERROR] subscribeWorker - Error flushing serial port: " + err.Error())
+		}
 
 		//Send stop command to the serial port
 		if err = xDot.sendStopCommand(); err != nil {
@@ -482,7 +479,6 @@ func (xDot *XdotSerialPort) StopSerialDataMode() error {
 
 		//Ignore "command not found" errors. These indicate the xDot is not in serial data mode
 		if err != nil && strings.Contains(err.Error(), "Command not found!") {
-			log.Println("[Info] StopSerialDataMode - Leaving loop")
 			break
 		}
 	}
@@ -493,17 +489,23 @@ func (xDot *XdotSerialPort) StopSerialDataMode() error {
 func (xDot *XdotSerialPort) sendStopCommand() error {
 	log.Println("[Info] sendStopCommand - Sending stop command")
 
-	if _, err := xDot.serialPort.Write([]byte(SerialDataModeStopCmd)); err != nil {
-		log.Println("[ERROR] sendStopCommand - Error writing SerialDataModeStopCmd to serial port: " + err.Error())
-		return err
-	}
-	for i := 0; i < 6; i++ {
-		if _, err := xDot.serialPort.Write([]byte("+")); err != nil {
+	// if _, err := xDot.serialPort.Write([]byte(SerialDataModeStopCmd)); err != nil {
+	// 	log.Println("[ERROR] sendStopCommand - Error writing SerialDataModeStopCmd to serial port: " + err.Error())
+	// 	return err
+	// }
+
+	//TODO - Only time will tell, but this appears to be the only way to terminate
+	//serial data mode reliably. It appears that there must be a small amount of time
+	//between the send of each "+". In addition sending a carriage return screws it up.
+	for i := 0; i < 3; i++ {
+		if n, err := xDot.serialPort.Write([]byte("+")); err != nil {
 			log.Println("[ERROR] sendStopCommand - Error writing + to serial port: " + err.Error())
 			return err
+		} else {
+			log.Printf("[DEBUG] sendStopCommand - Number of bytes written: %d\n", n)
 		}
 
-		time.Sleep(350 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// log.Println("[Info] sendStopCommand - Sending carriage return")

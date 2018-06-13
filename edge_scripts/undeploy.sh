@@ -1,8 +1,5 @@
 #!/bin/bash
 
-#stop the xDotAdapter service
-/etc/init.d/xDotAdapter stop
-
 #Remove the init.d script
 rm /etc/init.d/xDotAdapter
 

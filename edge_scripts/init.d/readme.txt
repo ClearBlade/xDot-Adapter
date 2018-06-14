@@ -7,6 +7,6 @@ Instructions for use:
 	3b. chown root:root /etc/init.d/xDotAdapter
 	3c. update-rc.d xDotAdapter defaults
 
-If you wish to start edge, rather than reboot, issue the following command from a terminal prompt:
+If you wish to start the adapter, rather than reboot, issue the following command from a terminal prompt:
 
 	/etc/init.d/xDotAdapter start

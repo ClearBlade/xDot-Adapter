@@ -18,32 +18,31 @@ import (
 )
 
 const (
-	platURL                    = "http://localhost:9000"
-	messURL                    = "localhost:1883"
-	msgSubscribeQos            = 0
-	msgPublishQos              = 0
-	adapterConfigCollIDDefault = "f6abf7af0bfcfabcf9ab86c0d1fb01"
-	serialRead                 = "receive"
-	serialWrite                = "send"
+	platURL         = "http://localhost:9000"
+	messURL         = "localhost:1883"
+	msgSubscribeQos = 0
+	msgPublishQos   = 0
+	serialRead      = "receive"
+	serialWrite     = "send"
 )
 
 var (
-	platformURL         string
-	messagingURL        string
+	platformURL         string //Defaults to http://localhost:9000
+	messagingURL        string //Defaults to localhost:1883
 	sysKey              string
 	sysSec              string
-	deviceName          string //Defaults to xDotSerialAdapter on adapter start up
+	deviceName          string //Defaults to xDotSerialAdapter
 	activeKey           string
-	logLevel            string
+	logLevel            string //Defaults to info
 	adapterConfigCollID string
 
-	serialPortName       = "/dev/ttyAP1"
-	networkAddress       = "00:11:22:33"
-	networkSessionKey    = "00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33"
-	networkDataKey       = "33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00"
-	transactionDataRate  = "DR8"
-	transactionFrequency = "915500000"
-	topicRoot            = "wayside/lora"
+	serialPortName        = "/dev/ttyAP1"
+	networkAddress        = "00:11:22:33"
+	networkSessionKey     = "00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33"
+	networkDataKey        = "33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00"
+	transmissionDataRate  = "DR8"
+	transmissionFrequency = "915500000"
+	topicRoot             = "wayside/lora"
 
 	serialPort          *xDotSerial.XdotSerialPort
 	serialConfigChanged = false
@@ -73,9 +72,9 @@ func init() {
 	flag.StringVar(&activeKey, "password", "", "password (or active key) for device authentication (required)")
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
-	flag.StringVar(&logLevel, "logLevel", "debug", "The level of logging to use. Available levels are 'debug', 'warn', 'error' (optional)")
+	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
 
-	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", adapterConfigCollIDDefault, "The ID of the data collection used to house adapter configuration (optional)")
+	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (optional)")
 }
 
 func usage() {
@@ -105,7 +104,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"DEBUG", "WARN", "ERROR"},
+		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
 		MinLevel: logutils.LogLevel(strings.ToUpper(logLevel)),
 		Writer: &lumberjack.Logger{
 			Filename:   "/var/log/xDotAdapter.log",
@@ -237,8 +236,8 @@ func configureXDot() {
 	// AT+NA=00:11:22:33 --> Set network address: Must be the same for all xDots. devAddr in LoraMac
 	// AT+NSK=00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33 --> Set network session key: Must be the same for all xDots.
 	// AT+DSK=33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00 --> Set data session key: Must be the same for all xDots.
-	// AT+TXDR=DR8 (US:DR8-DR13,EU:DR0-DR6) --> Set the transaction data rate for all channels
-	// AT+TXF=915500000 (US-ONLY:915.5-919.7) --> Set the transaction frequency
+	// AT+TXDR=DR8 (US:DR8-DR13,EU:DR0-DR6) --> Set the transmission data rate for all channels
+	// AT+TXF=915500000 (US-ONLY:915.5-919.7) --> Set the transmission frequency
 	// AT&W --> Save configuration to flash memory
 	// ATZ --> Reset CPU: Takes about 3 seconds
 	// AT+SD --> Serial Data Mode
@@ -293,9 +292,9 @@ func configureXDot() {
 		}
 	}
 
-	//Set transaction data rate
-	log.Println("[DEBUG] configureXDot - Setting transaction data rate...")
-	if valueChanged, err := serialPort.SetDataRate(transactionDataRate); err != nil {
+	//Set transmission data rate
+	log.Println("[DEBUG] configureXDot - Setting transmission data rate...")
+	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
 		panic(err.Error())
 	} else {
 		if valueChanged == true {
@@ -303,9 +302,9 @@ func configureXDot() {
 		}
 	}
 
-	//Set transaction frequency
-	log.Println("[DEBUG] configureXDot - Setting transaction frequency...")
-	if valueChanged, err := serialPort.SetFrequency(transactionFrequency); err != nil {
+	//Set transmission frequency
+	log.Println("[DEBUG] configureXDot - Setting transmission frequency...")
+	if valueChanged, err := serialPort.SetFrequency(transmissionFrequency); err != nil {
 		panic(err.Error())
 	} else {
 		if valueChanged == true {
@@ -524,20 +523,20 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 		adapterSettings["networkDataKey"] = networkDataKey
 	}
 
-	//transactionDataRate
-	if adapterSettings["transactionDataRate"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting transactionDataRate to %s", adapterSettings["transactionDataRate"].(string)+"\n")
-		transactionDataRate = adapterSettings["transactionDataRate"].(string)
+	//transmissionDataRate
+	if adapterSettings["transmissionDataRate"] != nil {
+		log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
+		transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
 	} else {
-		adapterSettings["transactionDataRate"] = transactionDataRate
+		adapterSettings["transmissionDataRate"] = transmissionDataRate
 	}
 
-	//transactionFrequency
-	if adapterSettings["transactionFrequency"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting transactionFrequency to %s", adapterSettings["transactionFrequency"].(string)+"\n")
-		transactionFrequency = adapterSettings["transactionFrequency"].(string)
+	//transmissionFrequency
+	if adapterSettings["transmissionFrequency"] != nil {
+		log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionFrequency to %s", adapterSettings["transmissionFrequency"].(string)+"\n")
+		transmissionFrequency = adapterSettings["transmissionFrequency"].(string)
 	} else {
-		adapterSettings["transactionFrequency"] = transactionFrequency
+		adapterSettings["transmissionFrequency"] = transmissionFrequency
 	}
 }
 

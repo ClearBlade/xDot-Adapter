@@ -84,7 +84,7 @@ const ReceiveDelayCmd = "AT+RXD"
 const ForwardErrorCorrectionCmd = "AT+FEC"
 const CyclicalRedundancyCheckCmd = "AT+CRC"
 const AdaptiveDataRateCmd = "AT+ADR"
-const TransactionDataRateCmd = "AT+TXDR"
+const TransmissionDataRateCmd = "AT+TXDR"
 const SessionDataRateCmd = "AT+SDR"
 const RepeatPacketCmd = "AT+REP"
 
@@ -122,7 +122,7 @@ const ReceiveDataRateCmd = "AT+RXDR"
 const ReceiveFrequencyCmd = "AT+RXF"
 const ReceiveContinuouslyCmd = "AT+RECVC"
 const SendOnIntervalCmd = "AT+SENDI"
-const TransactionFrequencyCmd = "AT+TXF"
+const TransmissionFrequencyCmd = "AT+TXF"
 
 // END OF AT COMMANDS
 

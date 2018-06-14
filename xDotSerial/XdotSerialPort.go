@@ -341,7 +341,7 @@ func (xDot *XdotSerialPort) GetDataRate() (string, error) {
 	log.Println("[DEBUG] GetDataRate - Retrieving data transmission rate")
 	var dataRate string
 	var err error
-	if dataRate, err = xDot.SendATCommand(TransactionDataRateCmd); err != nil {
+	if dataRate, err = xDot.SendATCommand(TransmissionDataRateCmd); err != nil {
 		log.Println("[ERROR] GetDataRate - Error retrieving data transmission rate")
 		return "", err
 	}
@@ -361,7 +361,7 @@ func (xDot *XdotSerialPort) SetDataRate(dataRate string) (bool, error) {
 			log.Println("[DEBUG] SetDataRate - Error retrieving data transmission rate")
 			return false, err
 		} else {
-			if _, err := xDot.SendATCommand(TransactionDataRateCmd + "=" + dataRate); err != nil {
+			if _, err := xDot.SendATCommand(TransmissionDataRateCmd + "=" + dataRate); err != nil {
 				log.Println("[DEBUG] SetDataRate - Error setting data transmission rate")
 				return false, err
 			}
@@ -377,7 +377,7 @@ func (xDot *XdotSerialPort) GetFrequency() (string, error) {
 	log.Println("[DEBUG] GetFrequency - Retrieving frequency")
 	var frequency string
 	var err error
-	if frequency, err = xDot.SendATCommand(TransactionFrequencyCmd); err != nil {
+	if frequency, err = xDot.SendATCommand(TransmissionFrequencyCmd); err != nil {
 		log.Println("[ERROR] GetFrequency - Error retrieving frequency: " + err.Error())
 		return "", err
 	}
@@ -397,7 +397,7 @@ func (xDot *XdotSerialPort) SetFrequency(freq string) (bool, error) {
 			log.Println("[ERROR] SetFrequency - Error retrieving data transmission frequency: " + err.Error())
 			return false, err
 		} else {
-			if _, err := xDot.SendATCommand(TransactionFrequencyCmd + "=" + freq); err != nil {
+			if _, err := xDot.SendATCommand(TransmissionFrequencyCmd + "=" + freq); err != nil {
 				log.Println("[ERROR] SetFrequency - Error setting data transmission frequency: " + err.Error())
 				return false, err
 			}

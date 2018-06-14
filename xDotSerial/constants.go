@@ -106,7 +106,6 @@ const SignalToNoiseRatioCmd = "AT+SNR"
 
 //Serial Data Mode
 const SerialDataModeCmd = "AT+SD"
-const SerialDataModeStopCmd = "+++\r"
 const SerialDataStartupModeCmd = "AT+SMODE"
 const SerialDataClearOnErrorCmd = "AT+SDCE"
 

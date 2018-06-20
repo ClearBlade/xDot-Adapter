@@ -73,6 +73,8 @@ func (xDot *XdotSerialPort) SendATCommand(cmd string) (string, error) {
 	if n == -1 {
 		log.Printf("[ERROR] SendATCommand - Bad return code received when executing AT command: %s\n", atCmd)
 		return "", errors.New("-1 return code received when executing AT command")
+	} else {
+		log.Printf("[DEBUG] SendATCommand - Number of bytes written: %d\n", n)
 	}
 
 	resp, err := xDot.readCommandResponse()
@@ -80,8 +82,8 @@ func (xDot *XdotSerialPort) SendATCommand(cmd string) (string, error) {
 		return "", err
 	}
 
-	log.Println("[DEBUG] SendATCommand - Returning AT command response: " + string(resp[:]))
-	return xDot.extractResponseData(cmd, string(resp[:])), nil
+	log.Println("[DEBUG] SendATCommand - Returning AT command response: " + resp)
+	return resp, nil
 }
 
 func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
@@ -128,35 +130,35 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 	}
 
 	log.Println("[DEBUG] readCommandResponse - Finished retrieving AT command response")
-	if strings.Contains(string(resp[:]), AtCmdErrorText) {
-		log.Println("[DEBUG] readCommandResponse - Error received executing AT command: " + string(resp[:]))
-		return "", errors.New(string(resp[:]))
+	if strings.Contains(resp, AtCmdErrorText) {
+		log.Println("[DEBUG] readCommandResponse - Error received executing AT command: " + resp)
+		return "", errors.New(resp)
 	}
 
-	log.Println("[DEBUG] readCommandResponse - Returning AT command response: " + string(resp[:]))
-	return string(resp[:]), nil
+	log.Println("[DEBUG] readCommandResponse - Returning AT command response: " + resp)
+	return resp, nil
 }
 
 func (xDot *XdotSerialPort) GetDeviceID() (string, error) {
 	log.Println("[DEBUG] GetDeviceID - Retrieving device ID")
-	var deviceID string
-	var err error
-	if deviceID, err = xDot.SendATCommand(DeviceIDCmd); err != nil {
+
+	if response, err := xDot.SendATCommand(DeviceIDCmd); err != nil {
 		log.Println("[ERROR] GetDeviceID - Error retrieving network join mode: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(DeviceIDCmd, response), nil
 	}
-	return deviceID, nil
 }
 
 func (xDot *XdotSerialPort) GetDeviceClass() (string, error) {
 	log.Println("[DEBUG] GetDeviceClass - Retrieving device class")
-	var devClass string
-	var err error
-	if devClass, err = xDot.SendATCommand(DeviceClassCmd); err != nil {
+
+	if response, err := xDot.SendATCommand(DeviceClassCmd); err != nil {
 		log.Println("[ERROR] GetDeviceClass - Error retrieving device class: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(DeviceClassCmd, response), nil
 	}
-	return devClass, nil
 }
 
 func (xDot *XdotSerialPort) SetDeviceClass(devClass string) (bool, error) {
@@ -187,13 +189,12 @@ func (xDot *XdotSerialPort) SetDeviceClass(devClass string) (bool, error) {
 
 func (xDot *XdotSerialPort) GetNetworkJoinMode() (string, error) {
 	log.Println("[DEBUG] GetNetworkJoinMode - Retrieving network join mode")
-	var joinMode string
-	var err error
-	if joinMode, err = xDot.SendATCommand(NetworkJoinModeCmd); err != nil {
+	if response, err := xDot.SendATCommand(NetworkJoinModeCmd); err != nil {
 		log.Println("[ERROR] GetNetworkJoinMode - Error retrieving network join mode: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkJoinModeCmd, response), nil
 	}
-	return joinMode, nil
 }
 
 func (xDot *XdotSerialPort) SetNetworkJoinMode(mode string) (bool, error) {
@@ -224,13 +225,12 @@ func (xDot *XdotSerialPort) SetNetworkJoinMode(mode string) (bool, error) {
 
 func (xDot *XdotSerialPort) GetNetworkAddress() (string, error) {
 	log.Println("[DEBUG] getNetworGetNetworkAddresskAddress - Retrieving network address")
-	var address string
-	var err error
-	if address, err = xDot.SendATCommand(NetworkAddrCmd); err != nil {
+	if response, err := xDot.SendATCommand(NetworkAddrCmd); err != nil {
 		log.Println("[ERROR] GetNetworkAddress - Error retrieving network address: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkAddrCmd, response), nil
 	}
-	return address, nil
 }
 
 func (xDot *XdotSerialPort) SetNetworkAddress(address string) (bool, error) {
@@ -261,13 +261,12 @@ func (xDot *XdotSerialPort) SetNetworkAddress(address string) (bool, error) {
 
 func (xDot *XdotSerialPort) GetNetworkSessionKey() (string, error) {
 	log.Println("[DEBUG] GetNetworkSessionKey - Retrieving network session key")
-	var sessionKey string
-	var err error
-	if sessionKey, err = xDot.SendATCommand(NetworkSessionKeyCmd); err != nil {
+	if response, err := xDot.SendATCommand(NetworkSessionKeyCmd); err != nil {
 		log.Println("[ERROR] GetNetworkSessionKey - Error setting network session key: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkSessionKeyCmd, response), nil
 	}
-	return sessionKey, nil
 }
 
 func (xDot *XdotSerialPort) SetNetworkSessionKey(sessionKey string) (bool, error) {
@@ -300,13 +299,12 @@ func (xDot *XdotSerialPort) SetNetworkSessionKey(sessionKey string) (bool, error
 
 func (xDot *XdotSerialPort) GetDataSessionKey() (string, error) {
 	log.Println("[DEBUG] GetDataSessionKey - Retrieving data session key")
-	var sessionKey string
-	var err error
-	if sessionKey, err = xDot.SendATCommand(NetworkDataKeyCmd); err != nil {
+	if response, err := xDot.SendATCommand(NetworkDataKeyCmd); err != nil {
 		log.Println("[ERROR] GetDataSessionKey - Error retrieving data session key" + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkDataKeyCmd, response), nil
 	}
-	return sessionKey, nil
 }
 
 func (xDot *XdotSerialPort) SetDataSessionKey(dataKey string) (bool, error) {
@@ -339,13 +337,12 @@ func (xDot *XdotSerialPort) SetDataSessionKey(dataKey string) (bool, error) {
 
 func (xDot *XdotSerialPort) GetDataRate() (string, error) {
 	log.Println("[DEBUG] GetDataRate - Retrieving data transmission rate")
-	var dataRate string
-	var err error
-	if dataRate, err = xDot.SendATCommand(TransmissionDataRateCmd); err != nil {
+	if response, err := xDot.SendATCommand(TransmissionDataRateCmd); err != nil {
 		log.Println("[ERROR] GetDataRate - Error retrieving data transmission rate")
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(TransmissionDataRateCmd, response), nil
 	}
-	return dataRate, nil
 }
 
 func (xDot *XdotSerialPort) SetDataRate(dataRate string) (bool, error) {
@@ -375,13 +372,12 @@ func (xDot *XdotSerialPort) SetDataRate(dataRate string) (bool, error) {
 
 func (xDot *XdotSerialPort) GetFrequency() (string, error) {
 	log.Println("[DEBUG] GetFrequency - Retrieving frequency")
-	var frequency string
-	var err error
-	if frequency, err = xDot.SendATCommand(TransmissionFrequencyCmd); err != nil {
+	if response, err := xDot.SendATCommand(TransmissionFrequencyCmd); err != nil {
 		log.Println("[ERROR] GetFrequency - Error retrieving frequency: " + err.Error())
 		return "", err
+	} else {
+		return xDot.ExtractResponseData(TransmissionFrequencyCmd, response), nil
 	}
-	return frequency, nil
 }
 
 func (xDot *XdotSerialPort) SetFrequency(freq string) (bool, error) {
@@ -449,10 +445,23 @@ func (xDot *XdotSerialPort) ResetXDotCPU() error {
 
 func (xDot *XdotSerialPort) StartSerialDataMode() error {
 	log.Println("[DEBUG] StartSerialDataMode - Starting serial data mode")
-	if _, err := xDot.SendATCommand(SerialDataModeCmd); err != nil {
-		log.Println("[ERROR] StartSerialDataMode - Error starting serial data mode: " + err.Error())
-		return err
+
+	loop := true
+	for loop {
+		if response, err := xDot.SendATCommand(SerialDataModeCmd); err != nil {
+			log.Println("[ERROR] StartSerialDataMode - Error starting serial data mode: " + err.Error())
+			return err
+		} else {
+			if strings.Contains(response, AtCmdConnectText) {
+				//If the response contains both CONNECT and OK, this
+				//Is a false positive. We need to continue trying
+				if !strings.Contains(response, AtCmdSuccessText) {
+					loop = false
+				}
+			}
+		}
 	}
+
 	return nil
 }
 
@@ -505,9 +514,11 @@ func (xDot *XdotSerialPort) sendStopCommand() error {
 	//The carriage return needs to be sent in the event that serial data mode is not active
 	time.Sleep(SendStopCarriageReturnDelay * time.Millisecond)
 	log.Println("[Info] sendStopCommand - Sending carriage return")
-	if _, err := xDot.serialPort.Write([]byte("\r")); err != nil {
+	if n, err := xDot.serialPort.Write([]byte("\r")); err != nil {
 		log.Println("[ERROR] sendStopCommand - Error writing \r to serial port: " + err.Error())
 		return err
+	} else {
+		log.Printf("[DEBUG] sendStopCommand - Number of bytes written: %d\n", n)
 	}
 	return nil
 }
@@ -529,10 +540,12 @@ func (xDot *XdotSerialPort) ReadSerialPort(ignoreEOF bool) (string, error) {
 }
 
 func (xDot *XdotSerialPort) WriteSerialPort(data string) error {
-	_, err := xDot.serialPort.Write([]byte(data))
+	n, err := xDot.serialPort.Write([]byte(data))
 	if err != nil {
 		log.Printf("[ERROR] WriteSerialPort - ERROR writing to serial port: %s\n", err.Error())
 		return err
+	} else {
+		log.Printf("[DEBUG] SendATCommand - Number of bytes written: %d\n", n)
 	}
 	return nil
 }
@@ -545,7 +558,7 @@ func (xDot *XdotSerialPort) FlushSerialPort() error {
 	return nil
 }
 
-func (xDot *XdotSerialPort) extractResponseData(atCmd string, cmdResp string) string {
+func (xDot *XdotSerialPort) ExtractResponseData(atCmd string, cmdResp string) string {
 
 	//Command responses will be in the following format:
 	//
@@ -561,13 +574,13 @@ func (xDot *XdotSerialPort) extractResponseData(atCmd string, cmdResp string) st
 	parsedResp := strings.Replace(cmdResp, atCmd, "", -1)
 
 	//Remove any OK
-	parsedResp = strings.Replace(parsedResp, "OK", "", -1)
+	parsedResp = strings.Replace(parsedResp, AtCmdSuccessText, "", -1)
 
 	//Remove any ERROR
-	parsedResp = strings.Replace(parsedResp, "ERROR", "", -1)
+	parsedResp = strings.Replace(parsedResp, AtCmdErrorText, "", -1)
 
 	//Remove any CONNECT
-	parsedResp = strings.Replace(parsedResp, "CONNECT", "", -1)
+	parsedResp = strings.Replace(parsedResp, AtCmdConnectText, "", -1)
 
 	//Remove any carriage returns
 	parsedResp = strings.Replace(parsedResp, "\r", "", -1)

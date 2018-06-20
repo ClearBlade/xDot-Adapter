@@ -1,6 +1,12 @@
 package xDotSerial
 
+//Network join modes
+const ManualConfigMode = "0"
+const OtaJoinMode = "1"
+const AutoOtaJoinMode = "2"
 const PeerToPeerMode = "3"
+
+//Device Classes
 const DeviceClassA = "A"
 const DeviceClassB = "B"
 const DeviceClassC = "C"
@@ -129,3 +135,6 @@ const TransmissionFrequencyCmd = "AT+TXF"
 const AtCmdSuccessText = "OK\r\n"
 const AtCmdErrorText = "ERROR\r\n"
 const AtCmdConnectText = "CONNECT\r\n"
+
+const SendStopDelay = 250               //milliseconds
+const SendStopCarriageReturnDelay = 750 //milliseconds

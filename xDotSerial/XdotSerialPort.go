@@ -499,11 +499,11 @@ func (xDot *XdotSerialPort) sendStopCommand() error {
 			log.Printf("[DEBUG] sendStopCommand - Number of bytes written: %d\n", n)
 		}
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(SendStopDelay * time.Millisecond)
 	}
 
 	//The carriage return needs to be sent in the event that serial data mode is not active
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(SendStopCarriageReturnDelay * time.Millisecond)
 	log.Println("[Info] sendStopCommand - Sending carriage return")
 	if _, err := xDot.serialPort.Write([]byte("\r")); err != nil {
 		log.Println("[ERROR] sendStopCommand - Error writing \r to serial port: " + err.Error())

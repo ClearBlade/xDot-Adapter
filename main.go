@@ -362,6 +362,8 @@ func subscribeWorker() {
 					var data string
 
 					for isWriting {
+						log.Println("[INFO] subscribeWorker - Currently writing to serial port. Waiting 1 second...")
+						time.Sleep(1 * time.Second)
 					}
 
 					isReading = true
@@ -393,7 +395,10 @@ func subscribeWorker() {
 					// If write request...
 					// Write string to serial port
 					for isReading {
+						log.Println("[INFO] subscribeWorker - Currently reading from serial port. Waiting 1 second...")
+						time.Sleep(1 * time.Second)
 					}
+
 					log.Printf("[DEBUG] subscribeWorker - Writing to serial port: %#v\n", message.Payload)
 					isWriting = true
 					err := serialPort.WriteSerialPort(string(message.Payload))
@@ -407,7 +412,7 @@ func subscribeWorker() {
 			}
 		case _ = <-endWorkersChannel:
 			//End the current go routine when the stop signal is received
-			log.Println("[INFO] subscribeWorker - Stopping write worker")
+			log.Println("[INFO] subscribeWorker - Stopping subscribeWorker")
 			return
 		}
 	}

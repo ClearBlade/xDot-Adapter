@@ -472,7 +472,7 @@ func (xDot *XdotSerialPort) StopSerialDataMode() error {
 	for err != nil {
 		//Flush serial port before attempting to exit serial data mode
 		if err := xDot.FlushSerialPort(); err != nil {
-			log.Println("[ERROR] subscribeWorker - Error flushing serial port: " + err.Error())
+			log.Println("[ERROR] StopSerialDataMode - Error flushing serial port: " + err.Error())
 		}
 
 		//Send stop command to the serial port

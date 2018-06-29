@@ -5,7 +5,7 @@ Instructions for use:
 3. From a terminal prompt, execute the following commands:
 	3a. chmod 755 /etc/init.d/xDotAdapter
 	3b. chown root:root /etc/init.d/xDotAdapter
-	3c. update-rc.d xDotAdapter defaults
+	3c. update-rc.d xDotAdapter defaults 85
 
 If you wish to start the adapter, rather than reboot, issue the following command from a terminal prompt:
 

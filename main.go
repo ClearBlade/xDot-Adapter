@@ -107,7 +107,7 @@ func main() {
 		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
 		MinLevel: logutils.LogLevel(strings.ToUpper(logLevel)),
 		Writer: &lumberjack.Logger{
-			Filename:   "/var/log/xDotAdapter.log",
+			Filename:   "/var/log/xDotAdapter",
 			MaxSize:    10, // megabytes
 			MaxBackups: 5,
 			MaxAge:     28, //days

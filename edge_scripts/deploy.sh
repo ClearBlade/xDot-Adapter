@@ -14,6 +14,6 @@ cp xDotAdapter.etc.default /etc/default/xDotAdapter
 chmod +x /etc/init.d/xDotAdapter
 
 #Add the adapter to the startup script
-update-rc.d xDotAdapter defaults
+update-rc.d xDotAdapter defaults 85
 
 echo "xDotAdapter Deployed"

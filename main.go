@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 	"xDotAdapter/xDotSerial"
@@ -18,12 +21,15 @@ import (
 )
 
 const (
-	platURL         = "http://localhost:9000"
-	messURL         = "localhost:1883"
-	msgSubscribeQos = 0
-	msgPublishQos   = 0
-	serialRead      = "receive"
-	serialWrite     = "send"
+	platURL                   = "http://localhost:9000"
+	messURL                   = "localhost:1883"
+	msgSubscribeQos           = 0
+	msgPublishQos             = 0
+	serialRead                = "receive"
+	serialWrite               = "send"
+	MTSIO_CMD                 = "mts-io-sysfs"
+	CONDUIT_PRODUCT_ID_PREFIX = "MTCDT"
+	XDOT_PRODUCT_ID           = "MTAC-MFSER-DTE"
 )
 
 var (
@@ -36,7 +42,7 @@ var (
 	logLevel            string //Defaults to info
 	adapterConfigCollID string
 
-	serialPortName        = "/dev/ttyAP1"
+	serialPortName        = ""
 	networkAddress        = "00:11:22:33"
 	networkSessionKey     = "00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33"
 	networkDataKey        = "33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00"
@@ -108,9 +114,9 @@ func main() {
 		MinLevel: logutils.LogLevel(strings.ToUpper(logLevel)),
 		Writer: &lumberjack.Logger{
 			Filename:   "/var/log/xDotAdapter",
-			MaxSize:    10, // megabytes
+			MaxSize:    1, // megabytes
 			MaxBackups: 5,
-			MaxAge:     28, //days
+			MaxAge:     10, //days
 		},
 	}
 	log.SetOutput(filter)
@@ -142,6 +148,8 @@ func main() {
 	endWorkersChannel = make(chan string)
 	done := make(chan bool)
 
+	defer close(done)
+
 	<-done
 }
 
@@ -164,6 +172,19 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	log.Println("[INFO] main - Retrieving adapter configuration...")
 	query, adapter_settings := getAdapterConfig()
 
+	if serialPortName == "" {
+		log.Println("[DEBUG] main - Retrieving serial port name")
+		setSerialPortName(adapter_settings)
+
+		if serialPortName == "" {
+			log.Fatalf("[FATAL] initCbClient - Unable to detect the serial port xDot is using")
+			return errors.New("Unable to detect the serial port xDot is using")
+		} else {
+			log.Println("[DEBUG] main - Updating adapter settings")
+			saveAdapterSettings(&query, adapter_settings)
+		}
+	}
+
 	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
 
 	log.Println("[DEBUG] main - Opening serial port")
@@ -179,9 +200,6 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	//Initialize xDot network settings and data rate
 	log.Println("[DEBUG] main - Configuring xDot")
 	configureXDot()
-
-	log.Println("[DEBUG] main - Updating device ID")
-	retrieveAndSaveDeviceId(&query, adapter_settings)
 
 	log.Println("[DEBUG] initCbClient - Initializing MQTT")
 	callbacks := cb.Callbacks{OnConnectionLostCallback: OnConnectLost, OnConnectCallback: OnConnect}
@@ -378,7 +396,7 @@ func subscribeWorker() {
 					if err != nil && !strings.Contains(err.Error(), "EOF") {
 						log.Printf("[ERROR] subscribeWorker - ERROR reading from serial port: %s\n", err.Error())
 					} else {
-						log.Printf("[DEBUG] subscribeWorker - Data read from serial port: %#v\n", data)
+						log.Printf("[DEBUG] subscribeWorker - Data read from serial port: %s\n", data)
 
 						if data != "" {
 							//Publish data to message broker
@@ -391,7 +409,6 @@ func subscribeWorker() {
 						}
 					}
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
-					log.Printf("[DEBUG] subscribeWorker - Write request received: %#v\n", message.Payload)
 					// If write request...
 					// Write string to serial port
 					for isReading {
@@ -399,7 +416,7 @@ func subscribeWorker() {
 						time.Sleep(1 * time.Second)
 					}
 
-					log.Printf("[DEBUG] subscribeWorker - Writing to serial port: %#v\n", message.Payload)
+					log.Printf("[DEBUG] subscribeWorker - Writing to serial port: %s\n", message.Payload)
 					isWriting = true
 					err := serialPort.WriteSerialPort(string(message.Payload))
 					isWriting = false
@@ -545,32 +562,74 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 	}
 }
 
-func retrieveAndSaveDeviceId(query *cb.Query, adapterSettings map[string]interface{}) {
-	deviceID, err := serialPort.GetDeviceID()
-	if err != nil {
-		log.Printf("[ERROR] retrieveAndSaveDeviceId - ERROR retrieving device ID: %s\n", err.Error())
+func saveAdapterSettings(query *cb.Query, adapterSettings map[string]interface{}) {
+	adapterSettings["serialPortName"] = serialPortName
+	if settingsBytes, err := json.Marshal(adapterSettings); err != nil {
+		log.Printf("[DEBUG] saveAdapterSettings - Error marshalling json: %s\n", err.Error())
+	} else {
+		changes := make(map[string]interface{})
+		changes["adapter_settings"] = string(settingsBytes)
+
+		log.Printf("[DEBUG] CHANGES = : %#v\n", changes)
+
+		err = cbBroker.client.UpdateData(adapterConfigCollID, query, changes)
+		if err != nil {
+			log.Printf("[ERROR] saveAdapterSettings - ERROR updating adapter_settings column: %s", err.Error())
+		}
 	}
-	log.Printf("[DEBUG] retrieveAndSaveDeviceId - Retrieved device ID: %s\n", deviceID)
+}
 
-	//Store device ID in adapter_settings within adapter_config collection
-	deviceID = strings.Replace(deviceID, "-", ":", -1)
+func setSerialPortName(adapterSettings map[string]interface{}) {
+	// 1. Determine if we are running on a Multitech Conduit
+	// 2. Determine which port (ap1 or ap2) has a product ID of MTAC-MFSER-DTE
+	//Need MTAC-MFSER-DTE
+	//ap1/product-id
+	//ap2/product-id
 
-	log.Printf("[DEBUG] adapterSettings: %#v\n", deviceID)
-	if adapterSettings["eui"] == nil || adapterSettings["eui"] != deviceID {
-		adapterSettings["eui"] = deviceID
+	//CONDUIT_PRODUCT_ID_PREFIX = "MTCDT"
+	//XDOT_PRODUCT_ID           = "MTAC-MFSER-DTE"
 
-		if settingsBytes, err := json.Marshal(adapterSettings); err != nil {
-			log.Printf("[DEBUG] retrieveAndSaveDeviceId - Error marshalling json: %s\n", err.Error())
+	productId := getProductId("")
+	if strings.Contains(productId, CONDUIT_PRODUCT_ID_PREFIX) {
+		log.Printf("[INFO] setSerialPortName - Multitech Conduit detected: %s\n", productId)
+		//We are running on a Multitech Conduit. Use ap1 and ap2 as port names
+		portProductID := getProductId("ap1")
+		if strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+			log.Printf("[INFO] setSerialPortName - XDOT detected on ap1\n")
+			serialPortName = "/dev/ttyAP1"
 		} else {
-			changes := make(map[string]interface{})
-			changes["adapter_settings"] = string(settingsBytes)
-
-			log.Printf("[DEBUG] CHANGES = : %#v\n", changes)
-
-			err = cbBroker.client.UpdateData(adapterConfigCollID, query, changes)
-			if err != nil {
-				log.Printf("[ERROR] retrieveAndSaveDeviceId - ERROR updating adapter_settings column: %s", err.Error())
+			portProductID := getProductId("ap2")
+			if strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+				log.Printf("[INFO] setSerialPortName - XDOT detected on ap2\n")
+				serialPortName = "/dev/ttyAP2"
+			} else {
+				log.Printf("[ERROR] setSerialPortName - XDOT not detected on ap1 or ap2\n")
 			}
 		}
+	} else {
+		log.Printf("[ERROR] setSerialPortName - Not running on a multitech conduit\n")
+		//Must be an actual xDot we are running on, not sure what port name
+		//to use at this time
+		serialPortName = ""
+	}
+}
+
+func getProductId(portName string) string {
+	port := ""
+	if portName != "" {
+		port += portName + "/"
+	}
+	port += "product-id"
+
+	cmd := exec.Command(MTSIO_CMD, "show", port)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("[ERROR] getProductId - ERROR executing mts-io-sysfs command: %s\n", err.Error())
+		return ""
+	} else {
+		log.Printf("[DEBUG] getProductId - Command response received: %s\n", out.String())
+		return out.String()
 	}
 }

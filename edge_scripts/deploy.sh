@@ -13,9 +13,6 @@ cp xDotAdapter.etc.default /etc/default/xDotAdapter
 #Ensure init.d script is executable
 chmod +x /etc/init.d/xDotAdapter
 
-#Add the adapter to the startup script
-update-rc.d xDotAdapter defaults 85
-
 #Remove xDotAdapter from monit in case it was already there
 sed -i '/xDotAdapter.pid/{N;N;N;N;d}' /etc/monitrc
 
@@ -27,7 +24,7 @@ sed -i '/#  check process apache with pidfile/i \
     depends on edge \
  ' /etc/monitrc
 
-#restart monit
-/etc/init.d/monit restart
+#reload monit config
+monit reload
 
 echo "xDotAdapter Deployed"

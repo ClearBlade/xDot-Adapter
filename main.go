@@ -9,7 +9,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 	"xDotAdapter/xDotSerial"
 
@@ -41,6 +43,9 @@ var (
 	activeKey           string
 	logLevel            string //Defaults to info
 	adapterConfigCollID string
+	readInterval        int
+	isReading           bool
+	isWriting           bool
 
 	serialPortName        = ""
 	networkAddress        = "00:11:22:33"
@@ -79,6 +84,7 @@ func init() {
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
+	flag.IntVar(&readInterval, "readInterval", 10, "The number of seconds to wait before each successive serial port read. (optional)")
 
 	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (required)")
 }
@@ -146,11 +152,18 @@ func main() {
 
 	defer close(endWorkersChannel)
 	endWorkersChannel = make(chan string)
-	done := make(chan bool)
 
-	defer close(done)
+	//Handle OS interrupts to shut down gracefully
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-c
 
-	<-done
+	log.Printf("[INFO] OS signal %s received, ending go routines.", sig)
+
+	//End the existing goRoutines
+	endWorkersChannel <- "Stop Channel"
+	endWorkersChannel <- "Stop Channel"
+	os.Exit(0)
 }
 
 // ClearBlade Client init helper
@@ -169,36 +182,36 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	}
 
 	//Retrieve adapter configuration data
-	log.Println("[INFO] main - Retrieving adapter configuration...")
+	log.Println("[INFO] initCbClient - Retrieving adapter configuration...")
 	query, adapter_settings := getAdapterConfig()
 
 	if serialPortName == "" {
-		log.Println("[DEBUG] main - Retrieving serial port name")
+		log.Println("[DEBUG] initCbClient - Retrieving serial port name")
 		setSerialPortName(adapter_settings)
 
 		if serialPortName == "" {
 			log.Fatalf("[FATAL] initCbClient - Unable to detect the serial port xDot is using")
 			return errors.New("Unable to detect the serial port xDot is using")
-		} else {
-			log.Println("[DEBUG] main - Updating adapter settings")
-			saveAdapterSettings(&query, adapter_settings)
 		}
 	}
 
+	log.Println("[DEBUG] initCbClient - Updating adapter settings")
+	saveAdapterSettings(&query, adapter_settings)
+
 	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
 
-	log.Println("[DEBUG] main - Opening serial port")
+	log.Println("[DEBUG] initCbClient - Opening serial port")
 	if err := serialPort.OpenSerialPort(); err != nil {
-		log.Panic("[FATAL] main - Error opening serial port: " + err.Error())
+		log.Panic("[FATAL] initCbClient - Error opening serial port: " + err.Error())
 	}
 
 	//Turn off serial data mode in case it is currently on
 	if err := serialPort.StopSerialDataMode(); err != nil {
-		log.Println("[WARN] main - Error stopping serial data mode: " + err.Error())
+		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
 	}
 
 	//Initialize xDot network settings and data rate
-	log.Println("[DEBUG] main - Configuring xDot")
+	log.Println("[DEBUG] initCbClient - Configuring xDot")
 	configureXDot()
 
 	log.Println("[DEBUG] initCbClient - Initializing MQTT")
@@ -217,6 +230,7 @@ func OnConnectLost(client mqtt.Client, connerr error) {
 	log.Printf("[INFO] OnConnectLost - Connection to broker was lost: %s\n", connerr.Error())
 
 	//End the existing goRoutines
+	endWorkersChannel <- "Stop Channel"
 	endWorkersChannel <- "Stop Channel"
 
 	//We don't need to worry about manally re-initializing the mqtt client. The auto reconnect logic will
@@ -240,8 +254,14 @@ func OnConnect(client mqtt.Client) {
 		cbSubscribeChannel, err = subscribe(topicRoot + "/#")
 	}
 
+	isReading = false
+	isWriting = false
+
 	//Start subscribe worker
 	go subscribeWorker()
+
+	//Start read loop
+	go readWorker()
 }
 
 func configureXDot() {
@@ -348,9 +368,6 @@ func configureXDot() {
 func subscribeWorker() {
 	log.Println("[DEBUG] subscribeWorker - Starting subscribeWorker")
 
-	isReading := false
-	isWriting := false
-
 	//Flush serial port one last time
 	if err := serialPort.FlushSerialPort(); err != nil {
 		log.Println("[ERROR] subscribeWorker - Error flushing serial port: " + err.Error())
@@ -370,59 +387,10 @@ func subscribeWorker() {
 			if ok {
 				//Determine if a read or write request was received
 				if strings.HasSuffix(message.Topic.Whole, serialRead+"/request") {
-
-					log.Println("[DEBUG] subscribeWorker - Read request received")
-					// If read request...
-					//
-					// 1. Read all data from serial port
-					// 2. Publish data to platform as string
-
-					var data string
-
-					for isWriting {
-						log.Println("[INFO] subscribeWorker - Currently writing to serial port. Waiting 1 second...")
-						time.Sleep(1 * time.Second)
-					}
-
-					isReading = true
-					buffer, err := serialPort.ReadSerialPort(false)
-					for err == nil {
-						data += buffer
-						buffer, err = serialPort.ReadSerialPort(false)
-					}
-
-					isReading = false
-
-					if err != nil && !strings.Contains(err.Error(), "EOF") {
-						log.Printf("[ERROR] subscribeWorker - ERROR reading from serial port: %s\n", err.Error())
-					} else {
-						log.Printf("[DEBUG] subscribeWorker - Data read from serial port: %s\n", data)
-
-						if data != "" {
-							//Publish data to message broker
-							err := publish(topicRoot+"/"+serialRead+"/response", data)
-							if err != nil {
-								log.Printf("[ERROR] subscribeWorker - ERROR publishing to topic: %s\n", err.Error())
-							}
-						} else {
-							log.Println("[DEBUG] subscribeWorker - No data read from serial port, skipping publish.")
-						}
-					}
+					readFromSerialPort()
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
 					// If write request...
-					// Write string to serial port
-					for isReading {
-						log.Println("[INFO] subscribeWorker - Currently reading from serial port. Waiting 1 second...")
-						time.Sleep(1 * time.Second)
-					}
-
-					log.Printf("[DEBUG] subscribeWorker - Writing to serial port: %s\n", message.Payload)
-					isWriting = true
-					err := serialPort.WriteSerialPort(string(message.Payload))
-					isWriting = false
-					if err != nil {
-						log.Printf("[ERROR] subscribeWorker - ERROR writing to serial port: %s\n", err.Error())
-					}
+					writeToSerialPort(string(message.Payload))
 				} else {
 					log.Printf("[DEBUG] subscribeWorker - Unknown request received: topic = %s, payload = %#v\n", message.Topic.Whole, message.Payload)
 				}
@@ -430,6 +398,23 @@ func subscribeWorker() {
 		case _ = <-endWorkersChannel:
 			//End the current go routine when the stop signal is received
 			log.Println("[INFO] subscribeWorker - Stopping subscribeWorker")
+			return
+		}
+	}
+}
+
+func readWorker() {
+	log.Println("[DEBUG] readWorker - Starting readWorker")
+	ticker := time.NewTicker(time.Duration(readInterval) * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Println("[DEBUG] readWorker - Reading from serial port")
+			readFromSerialPort()
+		case <-endWorkersChannel:
+			log.Println("[DEBUG] readWorker - stopping ticker")
+			ticker.Stop()
 			return
 		}
 	}
@@ -582,12 +567,6 @@ func saveAdapterSettings(query *cb.Query, adapterSettings map[string]interface{}
 func setSerialPortName(adapterSettings map[string]interface{}) {
 	// 1. Determine if we are running on a Multitech Conduit
 	// 2. Determine which port (ap1 or ap2) has a product ID of MTAC-MFSER-DTE
-	//Need MTAC-MFSER-DTE
-	//ap1/product-id
-	//ap2/product-id
-
-	//CONDUIT_PRODUCT_ID_PREFIX = "MTCDT"
-	//XDOT_PRODUCT_ID           = "MTAC-MFSER-DTE"
 
 	productId := getProductId("")
 	if strings.Contains(productId, CONDUIT_PRODUCT_ID_PREFIX) {
@@ -621,15 +600,70 @@ func getProductId(portName string) string {
 	}
 	port += "product-id"
 
-	cmd := exec.Command(MTSIO_CMD, "show", port)
+	return executeMtsIoCommand(port)
+}
+
+func executeMtsIoCommand(mtsioObject string) string {
+	cmd := exec.Command(MTSIO_CMD, "show", mtsioObject)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("[ERROR] getProductId - ERROR executing mts-io-sysfs command: %s\n", err.Error())
+		log.Printf("[ERROR] executeMtsIoCommand - ERROR executing mts-io-sysfs command: %s\n", err.Error())
 		return ""
 	} else {
-		log.Printf("[DEBUG] getProductId - Command response received: %s\n", out.String())
+		log.Printf("[DEBUG] executeMtsIoCommand - Command response received: %s\n", out.String())
 		return out.String()
+	}
+}
+
+func readFromSerialPort() {
+	// 1. Read all data from serial port
+	// 2. Publish data to platform as string
+	var data string
+
+	for isWriting {
+		log.Println("[INFO] readFromSerialPort - Currently writing to serial port. Waiting 1 second...")
+		time.Sleep(1 * time.Second)
+	}
+
+	isReading = true
+	buffer, err := serialPort.ReadSerialPort(false)
+	for err == nil {
+		data += buffer
+		buffer, err = serialPort.ReadSerialPort(false)
+	}
+
+	isReading = false
+
+	if err != nil && !strings.Contains(err.Error(), "EOF") {
+		log.Printf("[ERROR] readFromSerialPort - ERROR reading from serial port: %s\n", err.Error())
+	} else {
+		log.Printf("[DEBUG] readFromSerialPort - Data read from serial port: %s\n", data)
+
+		if data != "" {
+			//Publish data to message broker
+			err := publish(topicRoot+"/"+serialRead+"/response", data)
+			if err != nil {
+				log.Printf("[ERROR] readFromSerialPort - ERROR publishing to topic: %s\n", err.Error())
+			}
+		} else {
+			log.Println("[DEBUG] readFromSerialPort - No data read from serial port, skipping publish.")
+		}
+	}
+}
+
+func writeToSerialPort(payload string) {
+	for isReading {
+		log.Println("[INFO] writeToSerialPort - Currently reading from serial port. Waiting 1 second...")
+		time.Sleep(1 * time.Second)
+	}
+
+	log.Printf("[DEBUG] writeToSerialPort - Writing to serial port: %s\n", payload)
+	isWriting = true
+	err := serialPort.WriteSerialPort(string(payload))
+	isWriting = false
+	if err != nil {
+		log.Printf("[ERROR] writeToSerialPort - ERROR writing to serial port: %s\n", err.Error())
 	}
 }

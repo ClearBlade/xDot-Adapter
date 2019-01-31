@@ -170,7 +170,7 @@ func (xDot *XdotSerialPort) SetDeviceClass(devClass string) (bool, error) {
 	log.Println("[DEBUG] SetDeviceClass - Current value = " + currentValue)
 	log.Println("[DEBUG] SetDeviceClass - Value to set = " + devClass)
 
-	if err != nil || !strings.Contains(currentValue, devClass) {
+	if err != nil || !strings.Contains(strings.ToLower(currentValue), strings.ToLower(devClass)) {
 		if err != nil {
 			log.Println("[ERROR] SetDeviceClass - Error retrieving device class: " + err.Error())
 			return false, err
@@ -242,7 +242,7 @@ func (xDot *XdotSerialPort) SetNetworkAddress(address string) (bool, error) {
 	log.Println("[DEBUG] SetNetworkAddress - Current value = " + currentValue)
 	log.Println("[DEBUG] SetNetworkAddress - Value to set = " + address)
 
-	if err != nil || !strings.Contains(currentValue, address) {
+	if err != nil || !strings.Contains(strings.ToLower(currentValue), strings.ToLower(address)) {
 		if err != nil {
 			log.Println("[DEBUG] SetNetworkAddress - Error retrieving network address: " + err.Error())
 			return false, err
@@ -280,7 +280,7 @@ func (xDot *XdotSerialPort) SetNetworkSessionKey(sessionKey string) (bool, error
 	log.Println("[DEBUG] SetNetworkSessionKey - Current value = " + currentValue)
 	log.Println("[DEBUG] SetNetworkSessionKey - Value to set = " + sessionKey)
 
-	if err != nil || !strings.Contains(currentValue, sessionKey) {
+	if err != nil || !strings.Contains(strings.ToLower(currentValue), strings.ToLower(sessionKey)) {
 		if err != nil {
 			log.Println("[ERROR] SetNetworkSessionKey - Error retrieving network session key: " + err.Error())
 			return false, err
@@ -318,7 +318,7 @@ func (xDot *XdotSerialPort) SetDataSessionKey(dataKey string) (bool, error) {
 	log.Println("[DEBUG] SetDataSessionKey - Current value = " + currentValue)
 	log.Println("[DEBUG] SetDataSessionKey - Value to set = " + dataKey)
 
-	if err != nil || !strings.Contains(currentValue, dataKey) {
+	if err != nil || !strings.Contains(strings.ToLower(currentValue), strings.ToLower(dataKey)) {
 		if err != nil {
 			log.Println("[ERROR] SetDataSessionKey - Error retrieving data session key")
 			return false, err
@@ -424,21 +424,22 @@ func (xDot *XdotSerialPort) ResetXDotCPU() error {
 	//Wait a few seconds and then continually try to open the port
 	time.Sleep(3 * time.Second)
 
-	err := xDot.OpenSerialPort()
-	var numTries = 1
-	for err != nil && numTries <= 5 {
-		log.Println("[ERROR] ResetXDotCPU - Error opening serial port: " + err.Error())
-		log.Println("[DEBUG] ResetXDotCPU - Unable to open serial port, waiting 500 milliseconds")
-		time.Sleep(500 * time.Millisecond)
+	//This may not be necessary
+	// err := xDot.OpenSerialPort()
+	// var numTries = 1
+	// for err != nil && numTries <= 5 {
+	// 	log.Println("[ERROR] ResetXDotCPU - Error opening serial port: " + err.Error())
+	// 	log.Println("[DEBUG] ResetXDotCPU - Unable to open serial port, waiting 500 milliseconds")
+	// 	time.Sleep(500 * time.Millisecond)
 
-		err = xDot.OpenSerialPort()
-		numTries++
-	}
+	// 	err = xDot.OpenSerialPort()
+	// 	numTries++
+	// }
 
-	if numTries > 5 {
-		log.Println("[ERROR] ResetXDotCPU - Unable to open serial port after 2500 milliseconds")
-		return errors.New("Unable to open serial port after 2500 milliseconds")
-	}
+	// if numTries > 5 {
+	// 	log.Println("[ERROR] ResetXDotCPU - Unable to open serial port after 2500 milliseconds")
+	// 	return errors.New("Unable to open serial port after 2500 milliseconds")
+	// }
 
 	return nil
 }

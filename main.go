@@ -17,7 +17,7 @@ import (
 
 	cb "github.com/clearblade/Go-SDK"
 	mqttTypes "github.com/clearblade/mqtt_parsing"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/clearblade/paho.mqtt.golang"
 	"github.com/hashicorp/logutils"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
@@ -170,6 +170,13 @@ func main() {
 func initCbClient(platformBroker cbPlatformBroker) error {
 	log.Println("[DEBUG] initCbClient - Initializing the ClearBlade client")
 
+	log.Printf("[DEBUG] initCbClient - Platform URL: %s\n", *(platformBroker.platformURL))
+	log.Printf("[DEBUG] initCbClient - Platform Messaging URL: %s\n", *(platformBroker.messagingURL))
+	log.Printf("[DEBUG] initCbClient - System Key: %s\n", *(platformBroker.systemKey))
+	log.Printf("[DEBUG] initCbClient - System Secrent: %s\n", *(platformBroker.systemSecret))
+	log.Printf("[DEBUG] initCbClient - Username: %s\n", *(platformBroker.username))
+	log.Printf("[DEBUG] initCbClient - Password: %s\n", *(platformBroker.password))
+
 	cbBroker.client = cb.NewDeviceClientWithAddrs(*(platformBroker.platformURL), *(platformBroker.messagingURL), *(platformBroker.systemKey), *(platformBroker.systemSecret), *(platformBroker.username), *(platformBroker.password))
 
 	for err := cbBroker.client.Authenticate(); err != nil; {
@@ -183,7 +190,7 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	//Retrieve adapter configuration data
 	log.Println("[INFO] initCbClient - Retrieving adapter configuration...")
-	query, adapter_settings := getAdapterConfig()
+	adapter_settings := getAdapterConfig()
 
 	if serialPortName == "" {
 		log.Println("[DEBUG] initCbClient - Retrieving serial port name")
@@ -194,9 +201,6 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 			return errors.New("Unable to detect the serial port xDot is using")
 		}
 	}
-
-	log.Println("[DEBUG] initCbClient - Updating adapter settings")
-	saveAdapterSettings(&query, adapter_settings)
 
 	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
 
@@ -355,13 +359,16 @@ func configureXDot() {
 		//Save the xDot configuration
 		if err := serialPort.SaveConfiguration(); err != nil {
 			log.Println("[WARN] configureXDot - Error saving xDot configuration: " + err.Error())
-		} else {
-			//Reset the xDot CPU
-			log.Println("[DEBUG] configureXDot - Resetting xDot CPU...")
-			if err := serialPort.ResetXDotCPU(); err != nil {
-				log.Panic("[FATAL] configureXDot - Error resetting xDot CPU: " + err.Error())
-			}
 		}
+		// Temporarily comment this out as it appear this hangs the xDot
+		//
+		// else {
+		// 	//Reset the xDot CPU
+		// 	log.Println("[DEBUG] configureXDot - Resetting xDot CPU...")
+		// 	if err := serialPort.ResetXDotCPU(); err != nil {
+		// 		log.Panic("[FATAL] configureXDot - Error resetting xDot CPU: " + err.Error())
+		// 	}
+		// }
 	}
 }
 
@@ -446,7 +453,7 @@ func publish(topic string, data string) error {
 	return nil
 }
 
-func getAdapterConfig() (cb.Query, map[string]interface{}) {
+func getAdapterConfig() map[string]interface{} {
 	var settingsJson map[string]interface{}
 
 	log.Println("[INFO] getAdapterConfig - Retrieving adapter config")
@@ -494,18 +501,10 @@ func getAdapterConfig() (cb.Query, map[string]interface{}) {
 
 	applyAdapterSettings(settingsJson)
 
-	return *query, settingsJson
+	return settingsJson
 }
 
 func applyAdapterSettings(adapterSettings map[string]interface{}) {
-	//serialPortName
-	if adapterSettings["serialPortName"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting serialPortName to %s", adapterSettings["serialPortName"].(string)+"\n")
-		serialPortName = adapterSettings["serialPortName"].(string)
-	} else {
-		adapterSettings["serialPortName"] = serialPortName
-	}
-
 	//networkAddress
 	if adapterSettings["networkAddress"] != nil {
 		log.Printf("[DEBUG] applyAdapterConfig - Setting networkAddress to %s", adapterSettings["networkAddress"].(string)+"\n")
@@ -544,23 +543,6 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 		transmissionFrequency = adapterSettings["transmissionFrequency"].(string)
 	} else {
 		adapterSettings["transmissionFrequency"] = transmissionFrequency
-	}
-}
-
-func saveAdapterSettings(query *cb.Query, adapterSettings map[string]interface{}) {
-	adapterSettings["serialPortName"] = serialPortName
-	if settingsBytes, err := json.Marshal(adapterSettings); err != nil {
-		log.Printf("[DEBUG] saveAdapterSettings - Error marshalling json: %s\n", err.Error())
-	} else {
-		changes := make(map[string]interface{})
-		changes["adapter_settings"] = string(settingsBytes)
-
-		log.Printf("[DEBUG] CHANGES = : %#v\n", changes)
-
-		err = cbBroker.client.UpdateData(adapterConfigCollID, query, changes)
-		if err != nil {
-			log.Printf("[ERROR] saveAdapterSettings - ERROR updating adapter_settings column: %s", err.Error())
-		}
 	}
 }
 
@@ -642,6 +624,10 @@ func readFromSerialPort() {
 		log.Printf("[DEBUG] readFromSerialPort - Data read from serial port: %s\n", data)
 
 		if data != "" {
+			//If there are any slashes in the data, we need to escape them so duktape
+			//doesn't throw a SyntaxError: unterminated string (line 1) error
+			data = strings.Replace(data, `\`, `\\`, -1)
+
 			//Publish data to message broker
 			err := publish(topicRoot+"/"+serialRead+"/response", data)
 			if err != nil {

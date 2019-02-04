@@ -123,23 +123,6 @@ The adapter_settings column will need to contain a JSON object containing the fo
 ---
 The xdot adapters are dependent upon the ClearBlade Go SDK and its dependent libraries being installed. The xDot adapter was written in Go and therefore requires Go to be installed (https://golang.org/doc/install).
 
-In addition, the adapter is dependent upon the Multitech C/C++ toolchain being installed. MultiTech Conduit gateways and xDot devices currently execute a specialized ARM 5 version of Linux named mLinux. Compiling the adapter and utilizing the C/C++ toolchain requires development to be done within a 64-bit Linux OS.
-
- * These steps require a PC running a 64-bit Linux OS or a virtual machine that runs a 64-bit Linux OS. For mLinux 3, Ubuntu 14.04 is preferred.  For mLinux 4, Ubuntu 14.04 or Ubuntu 16.04 may be used.
-
-
-### Installing the Multitech C/C++ toolchain
-Information regarding the C/C++ toolchain and its installation can be found at http://www.multitech.net/developer/software/mlinux/mlinux-software-development/mlinux-c-toolchain/
-
-The following steps summarize the installation of the MultiTech C/C++ toolchain:
-
- 1. Download the installation script  
-     * ```curl http://www.multitech.net/mlinux/sdk/3.3.6/mlinux-eglibc-x86_64-mlinux-factory-image-arm926ejste-toolchain-3.3.6.sh > mlinux-toolchain-install.sh```
- 2. Install the installation script  
-    * ```chmod +x mlinux-toolchain-install.sh```
-    * ```./mlinux-toolchain-install.sh```
- 3. Load the toolchain environment  
-    * ```source /path/to/sdk/environment-setup-arm926ejste-mlinux-linux-gnueabi```
 
 ### Adapter compilation
 In order to compile the adapter for execution within mLinux, the following steps need to be performed:
@@ -148,8 +131,6 @@ In order to compile the adapter for execution within mLinux, the following steps
     * ```git clone git@github.com:ClearBlade/xDot-Adapter.git```
  2. Navigate to the xdotadapter directory  
     * ```cd xdotadapter```
- 3. Load the toolchain environment - If this hasn't already been done  
-    * ```source /path/to/sdk/environment-setup-arm926ejste-mlinux-linux-gnueabi```
  4. Compile the adapter
     * ```GOARCH=arm GOARM=5 CGO_ENABLED=1 GOOS=linux go build```
 

@@ -168,7 +168,7 @@ func main() {
 
 // ClearBlade Client init helper
 func initCbClient(platformBroker cbPlatformBroker) error {
-	log.Println("[DEBUG] initCbClient - Initializing the ClearBlade client")
+	log.Println("[INFO] initCbClient - Initializing the ClearBlade client")
 
 	log.Printf("[DEBUG] initCbClient - Platform URL: %s\n", *(platformBroker.platformURL))
 	log.Printf("[DEBUG] initCbClient - Platform Messaging URL: %s\n", *(platformBroker.messagingURL))
@@ -215,10 +215,10 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	}
 
 	//Initialize xDot network settings and data rate
-	log.Println("[DEBUG] initCbClient - Configuring xDot")
+	log.Println("[INFO] initCbClient - Configuring xDot")
 	configureXDot()
 
-	log.Println("[DEBUG] initCbClient - Initializing MQTT")
+	log.Println("[INFO] initCbClient - Initializing MQTT")
 	callbacks := cb.Callbacks{OnConnectionLostCallback: OnConnectLost, OnConnectCallback: OnConnect}
 	if err := cbBroker.client.InitializeMQTTWithCallback(platformBroker.clientID, "", 30, nil, nil, &callbacks); err != nil {
 		log.Fatalf("[FATAL] initCbClient - Unable to initialize MQTT connection with %s: %s", platformBroker.name, err.Error())
@@ -285,7 +285,7 @@ func configureXDot() {
 	// AT+SD --> Serial Data Mode
 
 	//Set network join mode to peer to peer
-	log.Println("[DEBUG] configureXDot - Setting network join mode...")
+	log.Println("[INFO] configureXDot - Setting network join mode...")
 	if valueChanged, err := serialPort.SetNetworkJoinMode(xDotSerial.PeerToPeerMode); err != nil {
 		panic(err.Error())
 	} else {
@@ -295,7 +295,7 @@ func configureXDot() {
 	}
 
 	//Set the device class to class C
-	log.Println("[DEBUG] configureXDot - Setting device class...")
+	log.Println("[INFO] configureXDot - Setting device class...")
 	if valueChanged, err := serialPort.SetDeviceClass(xDotSerial.DeviceClassC); err != nil {
 		panic(err.Error())
 	} else {
@@ -305,7 +305,7 @@ func configureXDot() {
 	}
 
 	//Set network address
-	log.Println("[DEBUG] configureXDot - Setting network address...")
+	log.Println("[INFO] configureXDot - Setting network address...")
 	if valueChanged, err := serialPort.SetNetworkAddress(networkAddress); err != nil {
 		panic(err.Error())
 	} else {
@@ -315,7 +315,7 @@ func configureXDot() {
 	}
 
 	//Set network session key
-	log.Println("[DEBUG] configureXDot - Setting network session key...")
+	log.Println("[INFO] configureXDot - Setting network session key...")
 	if valueChanged, err := serialPort.SetNetworkSessionKey(networkSessionKey); err != nil {
 		panic(err.Error())
 	} else {
@@ -325,7 +325,7 @@ func configureXDot() {
 	}
 
 	//Set data session key
-	log.Println("[DEBUG] configureXDot - Setting data session key...")
+	log.Println("[INFO] configureXDot - Setting data session key...")
 	if valueChanged, err := serialPort.SetDataSessionKey(networkDataKey); err != nil {
 		panic(err.Error())
 	} else {
@@ -335,7 +335,7 @@ func configureXDot() {
 	}
 
 	//Set transmission data rate
-	log.Println("[DEBUG] configureXDot - Setting transmission data rate...")
+	log.Println("[INFO] configureXDot - Setting transmission data rate...")
 	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
 		panic(err.Error())
 	} else {
@@ -345,7 +345,7 @@ func configureXDot() {
 	}
 
 	//Set transmission frequency
-	log.Println("[DEBUG] configureXDot - Setting transmission frequency...")
+	log.Println("[INFO] configureXDot - Setting transmission frequency...")
 	if valueChanged, err := serialPort.SetFrequency(transmissionFrequency); err != nil {
 		panic(err.Error())
 	} else {
@@ -373,7 +373,7 @@ func configureXDot() {
 }
 
 func subscribeWorker() {
-	log.Println("[DEBUG] subscribeWorker - Starting subscribeWorker")
+	log.Println("[INFO] subscribeWorker - Starting subscribeWorker")
 
 	//Flush serial port one last time
 	if err := serialPort.FlushSerialPort(); err != nil {
@@ -394,9 +394,11 @@ func subscribeWorker() {
 			if ok {
 				//Determine if a read or write request was received
 				if strings.HasSuffix(message.Topic.Whole, serialRead+"/request") {
+					log.Println("[INFO] subscribeWorker - Handling read request...")
 					readFromSerialPort()
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
 					// If write request...
+					log.Println("[INFO] subscribeWorker - Handling write request...")
 					writeToSerialPort(string(message.Payload))
 				} else {
 					log.Printf("[DEBUG] subscribeWorker - Unknown request received: topic = %s, payload = %#v\n", message.Topic.Whole, message.Payload)
@@ -411,7 +413,7 @@ func subscribeWorker() {
 }
 
 func readWorker() {
-	log.Println("[DEBUG] readWorker - Starting readWorker")
+	log.Println("[INFO] readWorker - Starting readWorker")
 	ticker := time.NewTicker(time.Duration(readInterval) * time.Second)
 
 	for {
@@ -610,10 +612,10 @@ func readFromSerialPort() {
 	}
 
 	isReading = true
-	buffer, err := serialPort.ReadSerialPort(false)
+	buffer, err := serialPort.ReadSerialPort()
 	for err == nil {
 		data += buffer
-		buffer, err = serialPort.ReadSerialPort(false)
+		buffer, err = serialPort.ReadSerialPort()
 	}
 
 	isReading = false
@@ -629,6 +631,7 @@ func readFromSerialPort() {
 			data = strings.Replace(data, `\`, `\\`, -1)
 
 			//Publish data to message broker
+			log.Println("[INFO] readFromSerialPort - Data read from serial port: " + data)
 			err := publish(topicRoot+"/"+serialRead+"/response", data)
 			if err != nil {
 				log.Printf("[ERROR] readFromSerialPort - ERROR publishing to topic: %s\n", err.Error())
@@ -645,7 +648,7 @@ func writeToSerialPort(payload string) {
 		time.Sleep(1 * time.Second)
 	}
 
-	log.Printf("[DEBUG] writeToSerialPort - Writing to serial port: %s\n", payload)
+	log.Printf("[INFO] writeToSerialPort - Writing to serial port: %s\n", payload)
 	isWriting = true
 	err := serialPort.WriteSerialPort(string(payload))
 	isWriting = false

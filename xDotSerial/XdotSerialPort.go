@@ -98,7 +98,7 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 	resp := ""
 	numTries := 1
 
-	buff, err := xDot.ReadSerialPort(true)
+	buff, err := xDot.ReadSerialPort()
 	if err != nil {
 		log.Println("[FATAL] readCommandResponse - Error Reading serial data response from serial port: " + err.Error())
 		panic(err.Error())
@@ -114,7 +114,7 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 
 		time.Sleep(sleepTime)
 
-		buff, err = xDot.ReadSerialPort(true)
+		buff, err = xDot.ReadSerialPort()
 		if err != nil {
 			log.Println("[FATAL] readCommandResponse - Error Reading serial data response from serial port: " + err.Error())
 			panic(err.Error())
@@ -179,11 +179,11 @@ func (xDot *XdotSerialPort) SetDeviceClass(devClass string) (bool, error) {
 				log.Println("[ERROR] SetDeviceClass - Error setting device class: " + err.Error())
 				return false, err
 			}
-			log.Println("[DEBUG] SetDeviceClass - Device class set to " + devClass)
+			log.Println("[INFO] SetDeviceClass - Device class set to " + devClass)
 			return true, nil
 		}
 	}
-
+	log.Println("[INFO] SetDeviceClass - Device class (unchanged) = " + devClass)
 	return false, nil
 }
 
@@ -215,11 +215,11 @@ func (xDot *XdotSerialPort) SetNetworkJoinMode(mode string) (bool, error) {
 				log.Println("[ERROR] SetNetworkJoinMode - Error setting network join mode: " + err.Error())
 				return false, err
 			}
-			log.Println("[DEBUG] SetNetworkJoinMode - Network join mode set to " + mode)
+			log.Println("[INFO] SetNetworkJoinMode - Network join set to " + mode)
 			return true, nil
 		}
 	}
-
+	log.Println("[INFO] SetNetworkJoinMode - Network join (unchanged) = " + mode)
 	return false, nil
 }
 
@@ -251,11 +251,12 @@ func (xDot *XdotSerialPort) SetNetworkAddress(address string) (bool, error) {
 				log.Println("[ERROR] SetNetworkAddress - Error setting network address: " + err.Error())
 				return false, err
 			}
-			log.Println("[DEBUG] SetNetworkAddress - Network session key set to " + address)
+			log.Println("[INFO] SetNetworkAddress - Network address set to " + address)
 			return true, nil
 		}
 	}
 
+	log.Println("[INFO] SetNetworkAddress - Network address (unchanged) = " + address)
 	return false, nil
 }
 
@@ -289,11 +290,12 @@ func (xDot *XdotSerialPort) SetNetworkSessionKey(sessionKey string) (bool, error
 				log.Println("[ERROR] SetNetworkSessionKey - Error setting network session key: " + err.Error())
 				return false, err
 			}
-			log.Println("[DEBUG] SetNetworkSessionKey - Network session key set to " + sessionKey)
+			log.Println("[INFO] SetNetworkSessionKey - Network session key set to " + sessionKey)
 			return true, nil
 		}
 	}
 
+	log.Println("[INFO] SetNetworkSessionKey - Network session key (unchanged) = " + sessionKey)
 	return false, nil
 }
 
@@ -327,11 +329,12 @@ func (xDot *XdotSerialPort) SetDataSessionKey(dataKey string) (bool, error) {
 				log.Println("[ERROR] SetDataSessionKey - Error setting data session key")
 				return false, err
 			}
-			log.Println("[DEBUG] SetDataSessionKey - Data session key set to " + dataKey)
+			log.Println("[INFO] SetDataSessionKey - Data session key set to " + dataKey)
 			return true, nil
 		}
 	}
 
+	log.Println("[INFO] SetDataSessionKey - Data session (unchanged) = " + dataKey)
 	return false, nil
 }
 
@@ -362,11 +365,12 @@ func (xDot *XdotSerialPort) SetDataRate(dataRate string) (bool, error) {
 				log.Println("[DEBUG] SetDataRate - Error setting data transmission rate")
 				return false, err
 			}
-			log.Println("[DEBUG] SetDataRate - Data transmission rate set to " + dataRate)
+			log.Println("[INFO] SetDataRate - Data transmission rate set to " + dataRate)
 			return true, nil
 		}
 	}
 
+	log.Println("[INFO] SetDataRate - Data transmission (unchanged) = " + dataRate)
 	return false, nil
 }
 
@@ -397,16 +401,16 @@ func (xDot *XdotSerialPort) SetFrequency(freq string) (bool, error) {
 				log.Println("[ERROR] SetFrequency - Error setting data transmission frequency: " + err.Error())
 				return false, err
 			}
-			log.Println("[DEBUG] SetFrequency - Data transmission frequency set to " + freq)
+			log.Println("[INFO] SetFrequency - Data transmission frequency set to " + freq)
 			return true, nil
 		}
 	}
-
+	log.Println("[INFO] SetFrequency - Data transmission frequency (unchanged) = " + freq)
 	return false, nil
 }
 
 func (xDot *XdotSerialPort) SaveConfiguration() error {
-	log.Println("[DEBUG] SaveConfiguration - Saving xDot configuration")
+	log.Println("[INFO] SaveConfiguration - Saving xDot configuration")
 	if _, err := xDot.SendATCommand(SaveConfigurationCmd); err != nil {
 		log.Println("[ERROR] SaveConfiguration - Error saving xDot configuration: " + err.Error())
 		return err
@@ -445,7 +449,7 @@ func (xDot *XdotSerialPort) ResetXDotCPU() error {
 }
 
 func (xDot *XdotSerialPort) StartSerialDataMode() error {
-	log.Println("[DEBUG] StartSerialDataMode - Starting serial data mode")
+	log.Println("[INFO] StartSerialDataMode - Starting serial data mode")
 
 	loop := true
 	for loop {
@@ -467,7 +471,7 @@ func (xDot *XdotSerialPort) StartSerialDataMode() error {
 }
 
 func (xDot *XdotSerialPort) StopSerialDataMode() error {
-	log.Println("[DEBUG] StopSerialDataMode - Stopping serial data mode")
+	log.Println("[INFO] StopSerialDataMode - Stopping serial data mode")
 
 	err := errors.New("")
 	for err != nil {
@@ -497,7 +501,7 @@ func (xDot *XdotSerialPort) StopSerialDataMode() error {
 }
 
 func (xDot *XdotSerialPort) sendStopCommand() error {
-	log.Println("[Info] sendStopCommand - Sending stop command")
+	log.Println("[INFO] sendStopCommand - Sending stop command")
 
 	//This appears to be the only way to terminate serial data mode reliably.
 	//There must be a small amount of time between the send of each "+".
@@ -514,7 +518,7 @@ func (xDot *XdotSerialPort) sendStopCommand() error {
 
 	//The carriage return needs to be sent in the event that serial data mode is not active
 	time.Sleep(SendStopCarriageReturnDelay * time.Millisecond)
-	log.Println("[Info] sendStopCommand - Sending carriage return")
+	log.Println("[INFO] sendStopCommand - Sending carriage return")
 	if n, err := xDot.serialPort.Write([]byte("\r")); err != nil {
 		log.Println("[ERROR] sendStopCommand - Error writing \r to serial port: " + err.Error())
 		return err
@@ -524,16 +528,17 @@ func (xDot *XdotSerialPort) sendStopCommand() error {
 	return nil
 }
 
-func (xDot *XdotSerialPort) ReadSerialPort(ignoreEOF bool) (string, error) {
+func (xDot *XdotSerialPort) ReadSerialPort() (string, error) {
 	buff := make([]byte, 128)
-
 	n, err := xDot.serialPort.Read(buff)
 
 	if err != nil {
-		if (ignoreEOF && !strings.Contains(err.Error(), "EOF")) || !ignoreEOF {
+		if !strings.Contains(err.Error(), "EOF") {
 			log.Println("[ERROR] readSerialPort - Error Reading from serial port: " + err.Error())
-			return "", err
+		} else {
+			log.Println("[DEBUG] readSerialPort - EOF returned when reading from serial port: " + err.Error())
 		}
+		return "", err
 	}
 
 	log.Printf("[DEBUG] readSerialPort - Number of bytes read: %d\n", n)
@@ -552,6 +557,7 @@ func (xDot *XdotSerialPort) WriteSerialPort(data string) error {
 }
 
 func (xDot *XdotSerialPort) FlushSerialPort() error {
+	log.Println("[INFO] FlushSerialPort - Flushing serial port")
 	if err := xDot.serialPort.Flush(); err != nil {
 		log.Println("[ERROR] FlushSerialPort - Error flushing serial port: " + err.Error())
 		return err

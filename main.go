@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"xDotAdapter/xDotSerial"
+	"xDot-Adapter/xDotSerial"
 
 	cb "github.com/clearblade/Go-SDK"
 	mqttTypes "github.com/clearblade/mqtt_parsing"
@@ -41,18 +41,27 @@ var (
 	deviceName          string //Defaults to xDotSerialAdapter
 	activeKey           string
 	logLevel            string //Defaults to info
+	initLoRaWANPublic   bool
 	adapterConfigCollID string
 	readInterval        int
 	isReading           bool
 	isWriting           bool
 
-	serialPortName        = ""
+	serialPortName = ""
+
+	// peer 2 peer mode adapter setting defaults
 	networkAddress        = "00:11:22:33"
 	networkSessionKey     = "00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33"
 	networkDataKey        = "33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00"
 	transmissionDataRate  = "DR8"
 	transmissionFrequency = "915500000"
-	topicRoot             = "wayside/lora"
+
+	// public ota lora mode adapter setting defaults (empty strings are required adapter settings)
+	networkID        = ""
+	networkKey       = ""
+	frequencySubBand = "0"
+
+	topicRoot = "wayside/lora"
 
 	serialPort          *xDotSerial.XdotSerialPort
 	serialConfigChanged = false
@@ -84,7 +93,7 @@ func init() {
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
 	flag.IntVar(&readInterval, "readInterval", 10, "The number of seconds to wait before each successive serial port read. (optional)")
-
+	flag.BoolVar(&initLoRaWANPublic, "initLoRaWANPublic", false, "Initialize xdot card to use LoRaWAN Public (optional - peer to peer mode is default)")
 	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (required)")
 }
 
@@ -162,6 +171,12 @@ func main() {
 
 	log.Printf("[INFO] OS signal %s received, ending go routines.", sig)
 
+	//stop serial data mode when adapter is killed
+	log.Println("[INFO] Stopping Serial Data Mode...")
+	if err := serialPort.StopSerialDataMode(); err != nil {
+		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
+	}
+
 	//End the existing goRoutines
 	endWorkersChannel <- "Stop Channel"
 	endWorkersChannel <- "Stop Channel"
@@ -217,8 +232,13 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	}
 
 	//Initialize xDot network settings and data rate
-	log.Println("[INFO] initCbClient - Configuring xDot")
-	configureXDot()
+	if initLoRaWANPublic {
+		log.Println("[INFO] initCbClient - Configuring xDot for LoRaWAN Public")
+		initXDotLoRaWANPublic()
+	} else {
+		log.Println("[INFO] initCbClient - Configuring xDot for Peer To Peer")
+		initXDotPeerToPeer()
+	}
 
 	log.Println("[INFO] initCbClient - Initializing MQTT")
 	callbacks := cb.Callbacks{OnConnectionLostCallback: OnConnectLost, OnConnectCallback: OnConnect}
@@ -270,7 +290,7 @@ func OnConnect(client mqtt.Client) {
 	go readWorker()
 }
 
-func configureXDot() {
+func initXDotPeerToPeer() {
 	//http://www.multitech.net/developer/software/mdot-software/peer-to-peer/
 
 	// In order to get the xDot card in Peer to Peer mode, we need to write AT commands
@@ -287,7 +307,7 @@ func configureXDot() {
 	// AT+SD --> Serial Data Mode
 
 	//Set network join mode to peer to peer
-	log.Println("[INFO] configureXDot - Setting network join mode...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting network join mode...")
 	if valueChanged, err := serialPort.SetNetworkJoinMode(xDotSerial.PeerToPeerMode); err != nil {
 		panic(err.Error())
 	} else {
@@ -297,7 +317,7 @@ func configureXDot() {
 	}
 
 	//Set the device class to class C
-	log.Println("[INFO] configureXDot - Setting device class...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting device class...")
 	if valueChanged, err := serialPort.SetDeviceClass(xDotSerial.DeviceClassC); err != nil {
 		panic(err.Error())
 	} else {
@@ -307,7 +327,7 @@ func configureXDot() {
 	}
 
 	//Set network address
-	log.Println("[INFO] configureXDot - Setting network address...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting network address...")
 	if valueChanged, err := serialPort.SetNetworkAddress(networkAddress); err != nil {
 		panic(err.Error())
 	} else {
@@ -317,7 +337,7 @@ func configureXDot() {
 	}
 
 	//Set network session key
-	log.Println("[INFO] configureXDot - Setting network session key...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting network session key...")
 	if valueChanged, err := serialPort.SetNetworkSessionKey(networkSessionKey); err != nil {
 		panic(err.Error())
 	} else {
@@ -327,7 +347,7 @@ func configureXDot() {
 	}
 
 	//Set data session key
-	log.Println("[INFO] configureXDot - Setting data session key...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting data session key...")
 	if valueChanged, err := serialPort.SetDataSessionKey(networkDataKey); err != nil {
 		panic(err.Error())
 	} else {
@@ -337,7 +357,7 @@ func configureXDot() {
 	}
 
 	//Set transmission data rate
-	log.Println("[INFO] configureXDot - Setting transmission data rate...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting transmission data rate...")
 	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
 		panic(err.Error())
 	} else {
@@ -347,7 +367,7 @@ func configureXDot() {
 	}
 
 	//Set transmission frequency
-	log.Println("[INFO] configureXDot - Setting transmission frequency...")
+	log.Println("[INFO] initXDotPeerToPeer - Setting transmission frequency...")
 	if valueChanged, err := serialPort.SetFrequency(transmissionFrequency); err != nil {
 		panic(err.Error())
 	} else {
@@ -357,21 +377,109 @@ func configureXDot() {
 	}
 
 	if serialConfigChanged == true {
-		log.Println("[DEBUG] configureXDot - xDot configuration changed, saving new values...")
+		log.Println("[DEBUG] initXDotPeerToPeer - xDot configuration changed, saving new values...")
 		//Save the xDot configuration
 		if err := serialPort.SaveConfiguration(); err != nil {
-			log.Println("[WARN] configureXDot - Error saving xDot configuration: " + err.Error())
+			log.Println("[WARN] initXDotPeerToPeer - Error saving xDot configuration: " + err.Error())
 		}
 		// Temporarily comment this out as it appear this hangs the xDot
 		//
 		// else {
 		// 	//Reset the xDot CPU
-		// 	log.Println("[DEBUG] configureXDot - Resetting xDot CPU...")
+		// 	log.Println("[DEBUG] initXDotPeerToPeer - Resetting xDot CPU...")
 		// 	if err := serialPort.ResetXDotCPU(); err != nil {
-		// 		log.Panic("[FATAL] configureXDot - Error resetting xDot CPU: " + err.Error())
+		// 		log.Panic("[FATAL] initXDotPeerToPeer - Error resetting xDot CPU: " + err.Error())
 		// 	}
 		// }
 	}
+}
+
+func initXDotLoRaWANPublic() {
+	// AT+NJM=1
+	// AT+NI=00-11-22-33-44-aa-bb-cc (from lora network server, all connecting lora device suse same)
+	// AT+NK=00.11.22.33.44.55.66.77.88.99.aa.bb.cc.dd.ee.ff (from lora network server, all connecting lora device suse same)
+	// AT+FSB=1 (based off lora network server, should come from config collection)
+	// save it!
+	// join it!
+
+	//Set network join mode to LoRaWAN Public
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting network join mode...")
+	if valueChanged, err := serialPort.SetNetworkJoinMode(xDotSerial.OtaJoinMode); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set the device class to class C
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting device class...")
+	if valueChanged, err := serialPort.SetDeviceClass(xDotSerial.DeviceClassC); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set Network ID
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting Network ID...")
+	if valueChanged, err := serialPort.SetNetworkID(networkID); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set Network Key
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting Network Key...")
+	if valueChanged, err := serialPort.SetNetworkKey(networkKey); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set Network Frequency Sub-Band
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting Network Frequence Sub-Band...")
+	if valueChanged, err := serialPort.SetFrequencySubBand(frequencySubBand); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged {
+			serialConfigChanged = true
+		}
+	}
+
+	if serialConfigChanged == true {
+		log.Println("[DEBUG] initXDotLoRaWANPublic - xDot configuration changed, saving new values...")
+		//Save the xDot configuration
+		if err := serialPort.SaveConfiguration(); err != nil {
+			log.Println("[WARN] initXDotLoRaWANPublic - Error saving xDot configuration: " + err.Error())
+		}
+	}
+
+	//Join network
+	log.Println("[INFO] initXDotLoRaWANPublic - Joining Network...")
+	if err := serialPort.JoinNetwork(); err != nil {
+		panic(err.Error())
+	}
+
+	// For us to start receiving downlinks, we need to AT+SEND 2 empty messages...
+	//  http://www.multitech.net/developer/software/lora/class-c-walkthrough/
+	// 1. AT+SEND to acknowledge Join Accept.
+	// 2. AT+SEND to acknowledge first downlink MAC commands
+	log.Println("[INFO] initXDotLoRaWANPublic - AT+SEND to ack Join Accept")
+	if err := serialPort.SendData(""); err != nil {
+		panic(err.Error())
+	}
+
+	log.Println("[INFO] initXDotLoRaWANPublic - AT+SEND to ack first downlink MAC commands")
+	if err := serialPort.SendData(""); err != nil {
+		panic(err.Error())
+	}
+
 }
 
 func subscribeWorker() {
@@ -509,45 +617,73 @@ func getAdapterConfig() map[string]interface{} {
 }
 
 func applyAdapterSettings(adapterSettings map[string]interface{}) {
-	//networkAddress
-	if adapterSettings["networkAddress"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting networkAddress to %s", adapterSettings["networkAddress"].(string)+"\n")
-		networkAddress = adapterSettings["networkAddress"].(string)
+
+	if initLoRaWANPublic {
+		//networkID
+		if adapterSettings["networkID"] != nil {
+			networkID = adapterSettings["networkID"].(string)
+			log.Printf("[DEBUG] applyAdapterConfig - Setting networkID to %s", networkID)
+		} else {
+			log.Printf("[ERROR] applyAdapterSettings - A networkID value is expected, using a bogus value that likely will not work\n")
+			adapterSettings["networkID"] = networkID
+		}
+		//networkKey
+		if adapterSettings["networkKey"] != nil {
+			networkKey = adapterSettings["networkKey"].(string)
+			log.Printf("[DEBUG] applyAdapterConfig - Setting networkKey to %s", networkKey)
+		} else {
+			log.Printf("[ERROR] applyAdapterSettings - A networkKey value is expected, using a bogus value that likely will not work\n")
+			adapterSettings["networkKey"] = networkKey
+		}
+		//frequencySubBand
+		if adapterSettings["frequencySubBand"] != nil {
+			frequencySubBand = adapterSettings["frequencySubBand"].(string)
+			log.Printf("[DEBUG] applyAdapterConfig - Setting frequencySubBand to %s", frequencySubBand)
+		} else {
+			adapterSettings["frequencySubBand"] = frequencySubBand
+		}
 	} else {
-		adapterSettings["networkAddress"] = networkAddress
+		//networkAddress
+		if adapterSettings["networkAddress"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting networkAddress to %s", adapterSettings["networkAddress"].(string)+"\n")
+			networkAddress = adapterSettings["networkAddress"].(string)
+		} else {
+			adapterSettings["networkAddress"] = networkAddress
+		}
+
+		//networkSessionKey
+		if adapterSettings["networkSessionKey"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting networkSessionKey to %s", adapterSettings["networkSessionKey"].(string)+"\n")
+			networkSessionKey = adapterSettings["networkSessionKey"].(string)
+		} else {
+			adapterSettings["networkSessionKey"] = networkSessionKey
+		}
+
+		//networkDataKey
+		if adapterSettings["networkDataKey"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting networkDataKey to %s", adapterSettings["networkDataKey"].(string)+"\n")
+			networkDataKey = adapterSettings["networkDataKey"].(string)
+		} else {
+			adapterSettings["networkDataKey"] = networkDataKey
+		}
+
+		//transmissionDataRate
+		if adapterSettings["transmissionDataRate"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
+			transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
+		} else {
+			adapterSettings["transmissionDataRate"] = transmissionDataRate
+		}
+
+		//transmissionFrequency
+		if adapterSettings["transmissionFrequency"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionFrequency to %s", adapterSettings["transmissionFrequency"].(string)+"\n")
+			transmissionFrequency = adapterSettings["transmissionFrequency"].(string)
+		} else {
+			adapterSettings["transmissionFrequency"] = transmissionFrequency
+		}
 	}
 
-	//networkSessionKey
-	if adapterSettings["networkSessionKey"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting networkSessionKey to %s", adapterSettings["networkSessionKey"].(string)+"\n")
-		networkSessionKey = adapterSettings["networkSessionKey"].(string)
-	} else {
-		adapterSettings["networkSessionKey"] = networkSessionKey
-	}
-
-	//networkDataKey
-	if adapterSettings["networkDataKey"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting networkDataKey to %s", adapterSettings["networkDataKey"].(string)+"\n")
-		networkDataKey = adapterSettings["networkDataKey"].(string)
-	} else {
-		adapterSettings["networkDataKey"] = networkDataKey
-	}
-
-	//transmissionDataRate
-	if adapterSettings["transmissionDataRate"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
-		transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
-	} else {
-		adapterSettings["transmissionDataRate"] = transmissionDataRate
-	}
-
-	//transmissionFrequency
-	if adapterSettings["transmissionFrequency"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionFrequency to %s", adapterSettings["transmissionFrequency"].(string)+"\n")
-		transmissionFrequency = adapterSettings["transmissionFrequency"].(string)
-	} else {
-		adapterSettings["transmissionFrequency"] = transmissionFrequency
-	}
 }
 
 func setSerialPortName(adapterSettings map[string]interface{}) {

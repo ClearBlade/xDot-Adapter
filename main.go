@@ -412,6 +412,16 @@ func initXDotLoRaWANPublic() {
 		}
 	}
 
+	// Set public network mode to 1 AT+PN=1
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting public network mode...")
+	if valueChanged, err := serialPort.SetPublicNetworkMode(xDotSerial.PublicLoRaWANNetworkMode); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
+
 	//Set the device class to class C
 	log.Println("[INFO] initXDotLoRaWANPublic - Setting device class...")
 	if valueChanged, err := serialPort.SetDeviceClass(xDotSerial.DeviceClassC); err != nil {

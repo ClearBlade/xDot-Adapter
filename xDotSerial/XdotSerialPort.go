@@ -413,6 +413,37 @@ func (xDot *XdotSerialPort) SetFrequency(freq string) (bool, error) {
 	return false, nil
 }
 
+func (xDot *XdotSerialPort) GetPublicNetworkMode() (string, error) {
+	log.Println("[DEBUG] GetPublicNetworkMode - Retrieving public network mode")
+	if response, err := xDot.SendATCommand(PublicNetworkModeCmd); err != nil {
+		log.Println("[ERROR] GetPublicNetworkMode - Error retrieving public network mode: " + err.Error())
+		return "", err
+	} else {
+		return xDot.ExtractResponseData(PublicNetworkModeCmd, response), nil
+	}
+}
+
+func (xDot *XdotSerialPort) SetPublicNetworkMode(mode string) (bool, error) {
+	log.Println("[DEBUG] SetPublicNetworkMode - Setting Public Network Mode")
+	currentValue, err := xDot.GetPublicNetworkMode()
+	if err != nil {
+		log.Println("[ERROR] SetPublicNetworkMode - Error retrieving: " + err.Error())
+		return false, err
+	}
+	log.Println("[DEBUG] SetPublicNetworkMode - Current value = " + currentValue)
+	log.Println("[DEBUG] SetPublicNetworkMode - Value to set = " + mode)
+	if currentValue == mode {
+		log.Println("[INFO] SetPublicNetworkMode - Unchanged = " + mode)
+		return false, nil
+	}
+	if _, err := xDot.SendATCommand(NetworkIdCmd + "=0," + mode); err != nil {
+		log.Println("[ERROR] SetPublicNetworkMode - Error setting: " + err.Error())
+		return false, err
+	}
+	log.Println("[INFO] SetPublicNetworkMode - Set to " + mode)
+	return true, nil
+}
+
 func (xDot *XdotSerialPort) GetNetworkID() (string, error) {
 	log.Println("[DEBUG] GetNetworkID - Retrieving Network ID")
 	if response, err := xDot.SendATCommand(NetworkIdCmd); err != nil {

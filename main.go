@@ -399,6 +399,7 @@ func initXDotLoRaWANPublic() {
 	// AT+NI=00-11-22-33-44-aa-bb-cc (from lora network server, all connecting lora device suse same)
 	// AT+NK=00.11.22.33.44.55.66.77.88.99.aa.bb.cc.dd.ee.ff (from lora network server, all connecting lora device suse same)
 	// AT+FSB=1 (based off lora network server, should come from config collection)
+	// AT+TXDR=3 (could depend on solution, pulling from config collection)
 	// save it!
 	// join it!
 
@@ -458,6 +459,16 @@ func initXDotLoRaWANPublic() {
 		panic(err.Error())
 	} else {
 		if valueChanged {
+			serialConfigChanged = true
+		}
+	}
+
+	// Set Date RateAT+TXDR=3
+	log.Println("[INFO] initXDotLoRaWANPublic - Setting transmission data rate...")
+	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
 			serialConfigChanged = true
 		}
 	}

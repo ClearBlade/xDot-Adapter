@@ -663,6 +663,13 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 		} else {
 			adapterSettings["frequencySubBand"] = frequencySubBand
 		}
+		//transmissionDataRate
+		if adapterSettings["transmissionDataRate"] != nil {
+			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
+			transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
+		} else {
+			adapterSettings["transmissionDataRate"] = transmissionDataRate
+		}
 	} else {
 		//networkAddress
 		if adapterSettings["networkAddress"] != nil {

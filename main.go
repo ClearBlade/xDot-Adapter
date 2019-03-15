@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"xDot-Adapter/xDotSerial"
@@ -68,6 +69,8 @@ var (
 	cbBroker            cbPlatformBroker
 	cbSubscribeChannel  <-chan *mqttTypes.Publish
 	endWorkersChannel   chan string
+
+	serialPortLock = &sync.Mutex{}
 )
 
 type cbPlatformBroker struct {
@@ -772,19 +775,19 @@ func readFromSerialPort() {
 	// 2. Publish data to platform as string
 	var data string
 
-	for isWriting {
-		log.Println("[INFO] readFromSerialPort - Currently writing to serial port. Waiting 1 second...")
-		time.Sleep(1 * time.Second)
-	}
-
-	isReading = true
+	// for isWriting {
+	// 	log.Println("[INFO] readFromSerialPort - Currently writing to serial port. Waiting 1 second...")
+	// 	time.Sleep(1 * time.Second)
+	// }
+	serialPortLock.Lock()
+	// isReading = true
 	buffer, err := serialPort.ReadSerialPort()
 	for err == nil {
 		data += buffer
 		buffer, err = serialPort.ReadSerialPort()
 	}
-
-	isReading = false
+	serialPortLock.Unlock()
+	// isReading = false
 
 	if err != nil && !strings.Contains(err.Error(), "EOF") {
 		log.Printf("[ERROR] readFromSerialPort - ERROR reading from serial port: %s\n", err.Error())
@@ -809,15 +812,17 @@ func readFromSerialPort() {
 }
 
 func writeToSerialPort(payload string) {
-	for isReading {
-		log.Println("[INFO] writeToSerialPort - Currently reading from serial port. Waiting 1 second...")
-		time.Sleep(1 * time.Second)
-	}
+	// for isReading {
+	// 	log.Println("[INFO] writeToSerialPort - Currently reading from serial port. Waiting 1 second...")
+	// 	time.Sleep(1 * time.Second)
+	// }
 
 	log.Printf("[INFO] writeToSerialPort - Writing to serial port: %s\n", payload)
-	isWriting = true
+	// isWriting = true
+	serialPortLock.Lock()
 	err := serialPort.WriteSerialPort(string(payload))
-	isWriting = false
+	serialPortLock.Unlock()
+	// isWriting = false
 	if err != nil {
 		log.Printf("[ERROR] writeToSerialPort - ERROR writing to serial port: %s\n", err.Error())
 	}

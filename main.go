@@ -123,21 +123,13 @@ func main() {
 	flag.Usage = usage
 	validateFlags()
 
-	//create the log file with the correct permissions
-	logfile, err := os.OpenFile("/var/log/xDotAdapter", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer logfile.Close()
-
 	//Initialize the logging mechanism
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	filter := &logutils.LevelFilter{
 		Levels:   []logutils.LogLevel{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"},
 		MinLevel: logutils.LogLevel(strings.ToUpper(logLevel)),
-		Writer:   logfile,
+		Writer:   os.Stdout,
 	}
 
 	log.SetOutput(filter)
@@ -158,7 +150,7 @@ func main() {
 	}
 
 	// Initialize ClearBlade Client
-	if err = initCbClient(cbBroker); err != nil {
+	if err := initCbClient(cbBroker); err != nil {
 		log.Println(err.Error())
 		log.Println("Unable to initialize CB broker client. Exiting.")
 		return
@@ -193,7 +185,7 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	log.Printf("[DEBUG] initCbClient - Platform URL: %s\n", *(platformBroker.platformURL))
 	log.Printf("[DEBUG] initCbClient - Platform Messaging URL: %s\n", *(platformBroker.messagingURL))
 	log.Printf("[DEBUG] initCbClient - System Key: %s\n", *(platformBroker.systemKey))
-	log.Printf("[DEBUG] initCbClient - System Secrent: %s\n", *(platformBroker.systemSecret))
+	log.Printf("[DEBUG] initCbClient - System Secret: %s\n", *(platformBroker.systemSecret))
 	log.Printf("[DEBUG] initCbClient - Username: %s\n", *(platformBroker.username))
 	log.Printf("[DEBUG] initCbClient - Password: %s\n", *(platformBroker.password))
 
@@ -280,7 +272,7 @@ func OnConnect(client mqtt.Client) {
 		log.Printf("[ERROR] OnConnect - Error subscribing to MQTT: %s\n", err.Error())
 		log.Println("[ERROR] OnConnect - Will retry in 30 seconds...")
 		time.Sleep(time.Duration(30 * time.Second))
-		cbSubscribeChannel, err = subscribe(topicRoot + "/#")
+		cbSubscribeChannel, err = subscribe(topicRoot + "/+/request")
 	}
 
 	isReading = false
@@ -385,7 +377,7 @@ func initXDotPeerToPeer() {
 		if err := serialPort.SaveConfiguration(); err != nil {
 			log.Println("[WARN] initXDotPeerToPeer - Error saving xDot configuration: " + err.Error())
 		}
-		// Temporarily comment this out as it appear this hangs the xDot
+		// Temporarily comment this out as it appears this hangs the xDot
 		//
 		// else {
 		// 	//Reset the xDot CPU

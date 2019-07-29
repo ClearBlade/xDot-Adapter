@@ -23,30 +23,31 @@ import (
 )
 
 const (
-	platURL                   = "http://localhost:9000"
-	messURL                   = "localhost:1883"
-	msgSubscribeQos           = 0
-	msgPublishQos             = 0
-	serialRead                = "receive"
-	serialWrite               = "send"
-	MTSIO_CMD                 = "mts-io-sysfs"
-	CONDUIT_PRODUCT_ID_PREFIX = "MTCDT"
-	XDOT_PRODUCT_ID           = "MTAC-MFSER-DTE"
+	platURL                        = "http://localhost:9000"
+	messURL                        = "localhost:1883"
+	msgSubscribeQos                = 0
+	msgPublishQos                  = 0
+	serialRead                     = "receive"
+	serialWrite                    = "send"
+	MTSIO_CMD                      = "mts-io-sysfs"
+	CONDUIT_PRODUCT_ID_PREFIX      = "MTCDT"
+	XDOT_PRODUCT_ID                = "MTAC-MFSER-DTE"
+	adapterConfigCollectionDefault = "adapter_config"
 )
 
 var (
-	platformURL         string //Defaults to http://localhost:9000
-	messagingURL        string //Defaults to localhost:1883
-	sysKey              string
-	sysSec              string
-	deviceName          string //Defaults to xDotSerialAdapter
-	activeKey           string
-	logLevel            string //Defaults to info
-	initLoRaWANPublic   bool
-	adapterConfigCollID string
-	readInterval        int
-	isReading           bool
-	isWriting           bool
+	platformURL             string //Defaults to http://localhost:9000
+	messagingURL            string //Defaults to localhost:1883
+	sysKey                  string
+	sysSec                  string
+	deviceName              string //Defaults to xDotSerialAdapter
+	activeKey               string
+	logLevel                string //Defaults to info
+	initLoRaWANPublic       bool
+	adapterConfigCollection string
+	readInterval            int
+	isReading               bool
+	isWriting               bool
 
 	serialPortName = ""
 
@@ -97,7 +98,7 @@ func init() {
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
 	flag.IntVar(&readInterval, "readInterval", 10, "The number of seconds to wait before each successive serial port read. (optional)")
 	flag.BoolVar(&initLoRaWANPublic, "initLoRaWANPublic", false, "Initialize xdot card to use LoRaWAN Public (optional - peer to peer mode is default)")
-	flag.StringVar(&adapterConfigCollID, "adapterConfigCollectionID", "", "The ID of the data collection used to house adapter configuration (required)")
+	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The name of the data collection used to house adapter configuration (required)")
 }
 
 func usage() {
@@ -591,8 +592,8 @@ func getAdapterConfig() map[string]interface{} {
 	query.EqualTo("adapter_name", "xDotSerialPortAdapter")
 
 	//A nil query results in all rows being returned
-	log.Println("[DEBUG] getAdapterConfig - Executing query against table " + adapterConfigCollID)
-	results, err := cbBroker.client.GetData(adapterConfigCollID, query)
+	log.Println("[DEBUG] getAdapterConfig - Executing query against table " + adapterConfigCollection)
+	results, err := cbBroker.client.GetDataByName(adapterConfigCollection, query)
 	if err != nil {
 		log.Println("[DEBUG] getAdapterConfig - Adapter configuration could not be retrieved. Using defaults")
 		log.Printf("[DEBUG] getAdapterConfig - Error: %s\n", err.Error())

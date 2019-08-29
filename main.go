@@ -7,9 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -31,7 +33,7 @@ const (
 	serialWrite                    = "send"
 	MTSIO_CMD                      = "mts-io-sysfs"
 	CONDUIT_PRODUCT_ID_PREFIX      = "MTCDT"
-	XDOT_PRODUCT_ID                = "MTAC-MFSER-DTE"
+	XDOT_PRODUCT_ID                = "MTAC-XDOT"
 	adapterConfigCollectionDefault = "adapter_config"
 )
 
@@ -123,6 +125,8 @@ func main() {
 	//Validate the command line flags
 	flag.Usage = usage
 	validateFlags()
+
+	rand.Seed(time.Now().UnixNano())
 
 	//Initialize the logging mechanism
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -238,7 +242,7 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	log.Println("[INFO] initCbClient - Initializing MQTT")
 	callbacks := cb.Callbacks{OnConnectionLostCallback: OnConnectLost, OnConnectCallback: OnConnect}
-	if err := cbBroker.client.InitializeMQTTWithCallback(platformBroker.clientID, "", 30, nil, nil, &callbacks); err != nil {
+	if err := cbBroker.client.InitializeMQTTWithCallback(platformBroker.clientID+"-"+strconv.Itoa(rand.Intn(10000)), "", 30, nil, nil, &callbacks); err != nil {
 		log.Fatalf("[FATAL] initCbClient - Unable to initialize MQTT connection with %s: %s", platformBroker.name, err.Error())
 		return err
 	}
@@ -278,6 +282,19 @@ func OnConnect(client mqtt.Client) {
 
 	isReading = false
 	isWriting = false
+
+	log.Println("[DEBUG] OnConnect - about to flush serial port")
+	//Flush serial port one last time
+	if err := serialPort.FlushSerialPort(); err != nil {
+		log.Println("[ERROR] OnConnect - Error flushing serial port: " + err.Error())
+	}
+
+	log.Println("[DEBUG] OnConnect - about to enter serial data mode")
+	//Enter serial data mode
+	log.Println("[DEBUG] OnConnect - Entering serial data mode...")
+	if err := serialPort.StartSerialDataMode(); err != nil {
+		log.Panic("[FATAL] OnConnect - Error starting serial data mode: " + err.Error())
+	}
 
 	//Start subscribe worker
 	go subscribeWorker()
@@ -502,17 +519,7 @@ func initXDotLoRaWANPublic() {
 func subscribeWorker() {
 	log.Println("[INFO] subscribeWorker - Starting subscribeWorker")
 
-	//Flush serial port one last time
-	if err := serialPort.FlushSerialPort(); err != nil {
-		log.Println("[ERROR] subscribeWorker - Error flushing serial port: " + err.Error())
-	}
-
 	defer serialPort.StopSerialDataMode()
-	//Enter serial data mode
-	log.Println("[DEBUG] subscribeWorker - Entering serial data mode...")
-	if err := serialPort.StartSerialDataMode(); err != nil {
-		log.Panic("[FATAL] subscribeWorker - Error starting serial data mode: " + err.Error())
-	}
 
 	//Wait for subscriptions to be received
 	for {
@@ -772,6 +779,7 @@ func readFromSerialPort() {
 	// 	log.Println("[INFO] readFromSerialPort - Currently writing to serial port. Waiting 1 second...")
 	// 	time.Sleep(1 * time.Second)
 	// }
+	log.Println("[DEBUG] readFromSerialPort - About to lock serialPortLock")
 	serialPortLock.Lock()
 	// isReading = true
 	buffer, err := serialPort.ReadSerialPort()
@@ -780,6 +788,7 @@ func readFromSerialPort() {
 		buffer, err = serialPort.ReadSerialPort()
 	}
 	serialPortLock.Unlock()
+	log.Println("[DEBUG] readFromSerialPort - Just unlocked serialPortLock")
 	// isReading = false
 
 	if err != nil && !strings.Contains(err.Error(), "EOF") {
@@ -812,9 +821,11 @@ func writeToSerialPort(payload string) {
 
 	log.Printf("[INFO] writeToSerialPort - Writing to serial port: %s\n", payload)
 	// isWriting = true
+	log.Println("[DEBUG] writeToSerialPort - About to lock serialPortLock")
 	serialPortLock.Lock()
 	err := serialPort.WriteSerialPort(string(payload))
 	serialPortLock.Unlock()
+	log.Println("[DEBUG] writeToSerialPort - Just unlocked serialPortLock")
 	// isWriting = false
 	if err != nil {
 		log.Printf("[ERROR] writeToSerialPort - ERROR writing to serial port: %s\n", err.Error())

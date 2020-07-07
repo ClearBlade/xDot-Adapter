@@ -2,10 +2,11 @@ package xDotSerial
 
 import (
 	"errors"
-	"github.com/tarm/serial"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/tarm/serial"
 )
 
 //XdotSerialPort - Struct that represents the serial port used to interface with a Xdot
@@ -574,26 +575,6 @@ func (xDot *XdotSerialPort) ResetXDotCPU() error {
 		log.Println("[ERROR] ResetXDotCPU - Error resetting CPU: " + err.Error())
 		return err
 	}
-
-	//Wait a few seconds and then continually try to open the port
-	time.Sleep(3 * time.Second)
-
-	//This may not be necessary
-	// err := xDot.OpenSerialPort()
-	// var numTries = 1
-	// for err != nil && numTries <= 5 {
-	// 	log.Println("[ERROR] ResetXDotCPU - Error opening serial port: " + err.Error())
-	// 	log.Println("[DEBUG] ResetXDotCPU - Unable to open serial port, waiting 500 milliseconds")
-	// 	time.Sleep(500 * time.Millisecond)
-
-	// 	err = xDot.OpenSerialPort()
-	// 	numTries++
-	// }
-
-	// if numTries > 5 {
-	// 	log.Println("[ERROR] ResetXDotCPU - Unable to open serial port after 2500 milliseconds")
-	// 	return errors.New("Unable to open serial port after 2500 milliseconds")
-	// }
 
 	return nil
 }

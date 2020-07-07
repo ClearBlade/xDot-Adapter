@@ -33,6 +33,7 @@ const (
 	serialWrite                    = "send"
 	MTSIO_CMD                      = "mts-io-sysfs"
 	CONDUIT_PRODUCT_ID_PREFIX      = "MTCDT"
+	XDOT_LEGACY_PRODUCT_ID         = "MTAC-MFSER-DTE"
 	XDOT_PRODUCT_ID                = "MTAC-XDOT"
 	adapterConfigCollectionDefault = "adapter_config"
 )
@@ -171,15 +172,16 @@ func main() {
 
 	log.Printf("[INFO] OS signal %s received, ending go routines.", sig)
 
+	//End the existing goRoutines
+	endWorkersChannel <- "Stop Channel"
+	endWorkersChannel <- "Stop Channel"
+
 	//stop serial data mode when adapter is killed
 	log.Println("[INFO] Stopping Serial Data Mode...")
 	if err := serialPort.StopSerialDataMode(); err != nil {
 		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
 	}
 
-	//End the existing goRoutines
-	endWorkersChannel <- "Stop Channel"
-	endWorkersChannel <- "Stop Channel"
 	os.Exit(0)
 }
 
@@ -196,13 +198,13 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	cbBroker.client = cb.NewDeviceClientWithAddrs(*(platformBroker.platformURL), *(platformBroker.messagingURL), *(platformBroker.systemKey), *(platformBroker.systemSecret), *(platformBroker.username), *(platformBroker.password))
 
-	for err := cbBroker.client.Authenticate(); err != nil; {
+	for _, err := cbBroker.client.Authenticate(); err != nil; {
 		log.Printf("[ERROR] initCbClient - Error authenticating %s: %s\n", platformBroker.name, err.Error())
 		log.Println("[ERROR] initCbClient - Will retry in 1 minute...")
 
 		// sleep 1 minute
 		time.Sleep(time.Duration(time.Minute * 1))
-		err = cbBroker.client.Authenticate()
+		_, err = cbBroker.client.Authenticate()
 	}
 
 	//Retrieve adapter configuration data
@@ -259,8 +261,15 @@ func OnConnectLost(client mqtt.Client, connerr error) {
 	endWorkersChannel <- "Stop Channel"
 	endWorkersChannel <- "Stop Channel"
 
-	//We don't need to worry about manally re-initializing the mqtt client. The auto reconnect logic will
-	//automatically try and reconnect. The reconnect interval could be as much as 20 minutes.
+	//stop serial data mode when adapter is killed
+	log.Println("[INFO] Stopping Serial Data Mode...")
+	if err := serialPort.StopSerialDataMode(); err != nil {
+		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
+	}
+
+	//We can't rely on MQTT auto-reconnect because it is most likely that our auth token expired
+	//When the connection is lost, just exit
+	log.Fatalln("[FATAL] onConnectLost - MQTT Connection was lost. Stopping Adapter to force device reauth.")
 }
 
 //When the connection to the broker is complete, set up the subscriptions
@@ -394,16 +403,13 @@ func initXDotPeerToPeer() {
 		//Save the xDot configuration
 		if err := serialPort.SaveConfiguration(); err != nil {
 			log.Println("[WARN] initXDotPeerToPeer - Error saving xDot configuration: " + err.Error())
+		} else {
+			//Reset the xDot CPU
+			log.Println("[DEBUG] initXDotPeerToPeer - Resetting xDot CPU...")
+			if err := serialPort.ResetXDotCPU(); err != nil {
+				log.Panic("[FATAL] initXDotPeerToPeer - Error resetting xDot CPU: " + err.Error())
+			}
 		}
-		// Temporarily comment this out as it appears this hangs the xDot
-		//
-		// else {
-		// 	//Reset the xDot CPU
-		// 	log.Println("[DEBUG] initXDotPeerToPeer - Resetting xDot CPU...")
-		// 	if err := serialPort.ResetXDotCPU(); err != nil {
-		// 		log.Panic("[FATAL] initXDotPeerToPeer - Error resetting xDot CPU: " + err.Error())
-		// 	}
-		// }
 	}
 }
 
@@ -529,11 +535,11 @@ func subscribeWorker() {
 				//Determine if a read or write request was received
 				if strings.HasSuffix(message.Topic.Whole, serialRead+"/request") {
 					log.Println("[INFO] subscribeWorker - Handling read request...")
-					readFromSerialPort()
+					go readFromSerialPort()
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
 					// If write request...
 					log.Println("[INFO] subscribeWorker - Handling write request...")
-					writeToSerialPort(string(message.Payload))
+					go writeToSerialPort(string(message.Payload))
 				} else {
 					log.Printf("[DEBUG] subscribeWorker - Unknown request received: topic = %s, payload = %#v\n", message.Topic.Whole, message.Payload)
 				}
@@ -554,7 +560,7 @@ func readWorker() {
 		select {
 		case <-ticker.C:
 			log.Println("[DEBUG] readWorker - Reading from serial port")
-			readFromSerialPort()
+			go readFromSerialPort()
 		case <-endWorkersChannel:
 			log.Println("[DEBUG] readWorker - stopping ticker")
 			ticker.Stop()
@@ -726,12 +732,12 @@ func setSerialPortName(adapterSettings map[string]interface{}) {
 		log.Printf("[INFO] setSerialPortName - Multitech Conduit detected: %s\n", productId)
 		//We are running on a Multitech Conduit. Use ap1 and ap2 as port names
 		portProductID := getProductId("ap1")
-		if strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+		if strings.Contains(portProductID, XDOT_LEGACY_PRODUCT_ID) || strings.Contains(portProductID, XDOT_PRODUCT_ID) {
 			log.Printf("[INFO] setSerialPortName - XDOT detected on ap1\n")
 			serialPortName = "/dev/ttyAP1"
 		} else {
 			portProductID := getProductId("ap2")
-			if strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+			if strings.Contains(portProductID, XDOT_LEGACY_PRODUCT_ID) || strings.Contains(portProductID, XDOT_PRODUCT_ID) {
 				log.Printf("[INFO] setSerialPortName - XDOT detected on ap2\n")
 				serialPortName = "/dev/ttyAP2"
 			} else {
@@ -802,7 +808,6 @@ func readFromSerialPort() {
 			data = strings.Replace(data, `\`, `\\`, -1)
 
 			//Publish data to message broker
-			log.Println("[INFO] readFromSerialPort - Data read from serial port: " + data)
 			err := publish(topicRoot+"/"+serialRead+"/response", data)
 			if err != nil {
 				log.Printf("[ERROR] readFromSerialPort - ERROR publishing to topic: %s\n", err.Error())

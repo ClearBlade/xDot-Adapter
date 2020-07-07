@@ -99,7 +99,9 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 	numTries := 1
 
 	buff, err := xDot.ReadSerialPort()
-	if err != nil {
+	if err != nil && strings.Contains(err.Error(), "EOF") {
+		log.Println("[INFO] readCommandResponse - EOF Error reading serial data...")
+	} else if err != nil {
 		log.Println("[FATAL] readCommandResponse - Error Reading serial data response from serial port: " + err.Error())
 		panic(err.Error())
 	}
@@ -115,7 +117,10 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 		time.Sleep(sleepTime)
 
 		buff, err = xDot.ReadSerialPort()
-		if err != nil {
+		if err != nil && strings.Contains(err.Error(), "EOF") {
+			numTries++
+			continue
+		} else if err != nil {
 			log.Println("[FATAL] readCommandResponse - Error Reading serial data response from serial port: " + err.Error())
 			panic(err.Error())
 		}
@@ -409,6 +414,152 @@ func (xDot *XdotSerialPort) SetFrequency(freq string) (bool, error) {
 	return false, nil
 }
 
+func (xDot *XdotSerialPort) GetPublicNetworkMode() (string, error) {
+	log.Println("[DEBUG] GetPublicNetworkMode - Retrieving public network mode")
+	if response, err := xDot.SendATCommand(PublicNetworkModeCmd); err != nil {
+		log.Println("[ERROR] GetPublicNetworkMode - Error retrieving public network mode: " + err.Error())
+		return "", err
+	} else {
+		return xDot.ExtractResponseData(PublicNetworkModeCmd, response), nil
+	}
+}
+
+func (xDot *XdotSerialPort) SetPublicNetworkMode(mode string) (bool, error) {
+	log.Println("[DEBUG] SetPublicNetworkMode - Setting Public Network Mode")
+	currentValue, err := xDot.GetPublicNetworkMode()
+	if err != nil {
+		log.Println("[ERROR] SetPublicNetworkMode - Error retrieving: " + err.Error())
+		return false, err
+	}
+	log.Println("[DEBUG] SetPublicNetworkMode - Current value = " + currentValue)
+	log.Println("[DEBUG] SetPublicNetworkMode - Value to set = " + mode)
+	if currentValue == mode {
+		log.Println("[INFO] SetPublicNetworkMode - Unchanged = " + mode)
+		return false, nil
+	}
+	if _, err := xDot.SendATCommand(NetworkIdCmd + "=0," + mode); err != nil {
+		log.Println("[ERROR] SetPublicNetworkMode - Error setting: " + err.Error())
+		return false, err
+	}
+	log.Println("[INFO] SetPublicNetworkMode - Set to " + mode)
+	return true, nil
+}
+
+func (xDot *XdotSerialPort) GetNetworkID() (string, error) {
+	log.Println("[DEBUG] GetNetworkID - Retrieving Network ID")
+	if response, err := xDot.SendATCommand(NetworkIdCmd); err != nil {
+		log.Println("[ERROR] GetNetworkID - Error retrieving Network ID: " + err.Error())
+		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkIdCmd, response), nil
+	}
+}
+
+func (xDot *XdotSerialPort) SetNetworkID(id string) (bool, error) {
+	log.Println("[DEBUG] SetNetworkID - Setting Network ID")
+	currentValue, err := xDot.GetNetworkID()
+	if err != nil {
+		log.Println("[ERROR] SetNetworkID - Error retrieving: " + err.Error())
+		return false, err
+	}
+	log.Println("[DEBUG] SetNetworkID - Current value = " + currentValue)
+	log.Println("[DEBUG] SetNetworkID - Value to set = " + id)
+	if currentValue == id {
+		log.Println("[INFO] SetNetworkID - Unchanged = " + id)
+		return false, nil
+	}
+	if _, err := xDot.SendATCommand(NetworkIdCmd + "=0," + id); err != nil {
+		log.Println("[ERROR] SetNetworkID - Error setting: " + err.Error())
+		return false, err
+	}
+	log.Println("[INFO] SetNetworkID - Set to " + id)
+	return true, nil
+}
+
+func (xDot *XdotSerialPort) GetNetworkKey() (string, error) {
+	log.Println("[DEBUG] GetNetworkKey - Retrieving Network Key")
+	if response, err := xDot.SendATCommand(NetworkKeyCmd); err != nil {
+		log.Println("[ERROR] GetNetworkKey - Error retrieving: " + err.Error())
+		return "", err
+	} else {
+		return xDot.ExtractResponseData(NetworkKeyCmd, response), nil
+	}
+}
+
+func (xDot *XdotSerialPort) SetNetworkKey(key string) (bool, error) {
+	log.Println("[DEBUG] SetNetworkKey - Setting Network Key")
+	currentValue, err := xDot.GetNetworkKey()
+	if err != nil {
+		log.Println("[ERROR] SetNetworkKey - Error retrieving: " + err.Error())
+		return false, err
+	}
+	log.Println("[DEBUG] SetNetworkKey - Current value = " + currentValue)
+	log.Println("[DEBUG] SetNetworkKey - Value to set = " + key)
+	if currentValue == key {
+		log.Println("[INFO] SetNetworkKey - Unchanged = " + key)
+		return false, nil
+	}
+	if _, err := xDot.SendATCommand(NetworkKeyCmd + "=0," + key); err != nil {
+		log.Println("[ERROR] SetNetworkKey - Error setting: " + err.Error())
+		return false, err
+	}
+	log.Println("[INFO] SetNetworkKey - Set to " + key)
+	return true, nil
+}
+
+func (xDot *XdotSerialPort) GetFrequencySubBand() (string, error) {
+	log.Println("[DEBUG] GetFrequencySubBand - Retrieving Frequency Sub-Band")
+	if response, err := xDot.SendATCommand(FrequencySubBandCmd); err != nil {
+		log.Println("[ERROR] GetFrequencySubBand - Error retrieving: " + err.Error())
+		return "", err
+	} else {
+		return xDot.ExtractResponseData(FrequencySubBandCmd, response), nil
+	}
+}
+
+func (xDot *XdotSerialPort) SetFrequencySubBand(subBand string) (bool, error) {
+	log.Println("[DEBUG] SetFrequencySubBand - Setting Frequency Sub-Band")
+	currentValue, err := xDot.GetFrequencySubBand()
+	if err != nil {
+		log.Println("[ERROR] SetFrequencySubBand - Error retrieving: " + err.Error())
+		return false, err
+	}
+	log.Println("[DEBUG] SetFrequencySubBand - Current value = " + currentValue)
+	log.Println("[DEBUG] SetFrequencySubBand - Value to set = " + subBand)
+	if currentValue == subBand {
+		log.Println("[INFO] SetFrequencySubBand - Unchanged = " + subBand)
+		return false, nil
+	}
+	if _, err := xDot.SendATCommand(FrequencySubBandCmd + "=" + subBand); err != nil {
+		log.Println("[ERROR] SetFrequencySubBand - Error setting: " + err.Error())
+		return false, err
+	}
+	log.Println("[INFO] SetFrequencySubBand - Set to " + subBand)
+	return true, nil
+}
+
+func (xDot *XdotSerialPort) JoinNetwork() error {
+	log.Println("[DEBUG] JoinNetwork - Joining Network")
+	if _, err := xDot.SendATCommand(NetworkJoinCmd); err != nil {
+		log.Println("[ERROR] JoinNetwork - Failed to join network: " + err.Error())
+		return err
+	}
+	return nil
+}
+
+func (xDot *XdotSerialPort) SendData(data string) error {
+	log.Println("[DEBUG] SendData - Sending Data")
+	command := SendDataCmd
+	if data != "" {
+		command += data
+	}
+	if _, err := xDot.SendATCommand(command); err != nil {
+		log.Println("[ERROR] SendData - failed to send data: " + err.Error())
+		return err
+	}
+	return nil
+}
+
 func (xDot *XdotSerialPort) SaveConfiguration() error {
 	log.Println("[INFO] SaveConfiguration - Saving xDot configuration")
 	if _, err := xDot.SendATCommand(SaveConfigurationCmd); err != nil {
@@ -424,26 +575,6 @@ func (xDot *XdotSerialPort) ResetXDotCPU() error {
 		log.Println("[ERROR] ResetXDotCPU - Error resetting CPU: " + err.Error())
 		return err
 	}
-
-	//Wait a few seconds and then continually try to open the port
-	time.Sleep(3 * time.Second)
-
-	//This may not be necessary
-	// err := xDot.OpenSerialPort()
-	// var numTries = 1
-	// for err != nil && numTries <= 5 {
-	// 	log.Println("[ERROR] ResetXDotCPU - Error opening serial port: " + err.Error())
-	// 	log.Println("[DEBUG] ResetXDotCPU - Unable to open serial port, waiting 500 milliseconds")
-	// 	time.Sleep(500 * time.Millisecond)
-
-	// 	err = xDot.OpenSerialPort()
-	// 	numTries++
-	// }
-
-	// if numTries > 5 {
-	// 	log.Println("[ERROR] ResetXDotCPU - Unable to open serial port after 2500 milliseconds")
-	// 	return errors.New("Unable to open serial port after 2500 milliseconds")
-	// }
 
 	return nil
 }

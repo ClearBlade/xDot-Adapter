@@ -11,6 +11,11 @@ const DeviceClassA = "A"
 const DeviceClassB = "B"
 const DeviceClassC = "C"
 
+// Public Network Modes
+const PrivateMTSNetworkMode = "0"
+const PublicLoRaWANNetworkMode = "1"
+const PrivateLoRaWANNetworkMode = "2"
+
 //AT Command assistance can be found by referencing the AT Command reference guide:
 //
 // http://wwwmultitechcom/documents/publications/manuals/s000643pdf

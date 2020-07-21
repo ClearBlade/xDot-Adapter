@@ -54,7 +54,7 @@ var (
 
 	serialPortName = ""
 
-	// peer 2 peer mode adapter setting defaults
+	// peer to peer mode adapter setting defaults
 	networkAddress        = "00:11:22:33"
 	networkSessionKey     = "00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33"
 	networkDataKey        = "33:22:11:00:33:22:11:00:33:22:11:00:33:22:11:00"
@@ -65,6 +65,10 @@ var (
 	networkID        = ""
 	networkKey       = ""
 	frequencySubBand = "0"
+
+	//adapter setting defaults common to both peer to peer mode and public ota lora mode
+	antennaGain   = "3"
+	transmitPower = "11"
 
 	topicRoot = "wayside/lora"
 
@@ -255,7 +259,7 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 //If the connection to the broker is lost, we need to reconnect and
 //re-establish all of the subscriptions
 func OnConnectLost(client mqtt.Client, connerr error) {
-	log.Printf("[INFO] OnConnectLost - Connection to broker was lost: %s\n", connerr.Error())
+	log.Printf("[ERROR] OnConnectLost - Connection to broker was lost: %s\n", connerr.Error())
 
 	//End the existing goRoutines
 	endWorkersChannel <- "Stop Channel"
@@ -378,16 +382,6 @@ func initXDotPeerToPeer() {
 		}
 	}
 
-	//Set transmission data rate
-	log.Println("[INFO] initXDotPeerToPeer - Setting transmission data rate...")
-	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
-		panic(err.Error())
-	} else {
-		if valueChanged == true {
-			serialConfigChanged = true
-		}
-	}
-
 	//Set transmission frequency
 	log.Println("[INFO] initXDotPeerToPeer - Setting transmission frequency...")
 	if valueChanged, err := serialPort.SetFrequency(transmissionFrequency); err != nil {
@@ -397,6 +391,8 @@ func initXDotPeerToPeer() {
 			serialConfigChanged = true
 		}
 	}
+
+	initXDotCommon()
 
 	if serialConfigChanged == true {
 		log.Println("[DEBUG] initXDotPeerToPeer - xDot configuration changed, saving new values...")
@@ -482,15 +478,7 @@ func initXDotLoRaWANPublic() {
 		}
 	}
 
-	// Set Date RateAT+TXDR=3
-	log.Println("[INFO] initXDotLoRaWANPublic - Setting transmission data rate...")
-	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
-		panic(err.Error())
-	} else {
-		if valueChanged == true {
-			serialConfigChanged = true
-		}
-	}
+	initXDotCommon()
 
 	if serialConfigChanged == true {
 		log.Println("[DEBUG] initXDotLoRaWANPublic - xDot configuration changed, saving new values...")
@@ -520,6 +508,38 @@ func initXDotLoRaWANPublic() {
 		panic(err.Error())
 	}
 
+}
+
+func initXDotCommon() {
+	//Set transmit power
+	log.Println("[INFO] initXDotCommon - Setting transmit power...")
+	if valueChanged, err := serialPort.SetTransmitPower(transmitPower); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set antenna gain
+	log.Println("[INFO] initXDotCommon - Setting antenna gain...")
+	if valueChanged, err := serialPort.SetAntennaGain(antennaGain); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
+
+	//Set transmission data rate
+	log.Println("[INFO] initXDotCommon - Setting transmission data rate...")
+	if valueChanged, err := serialPort.SetDataRate(transmissionDataRate); err != nil {
+		panic(err.Error())
+	} else {
+		if valueChanged == true {
+			serialConfigChanged = true
+		}
+	}
 }
 
 func subscribeWorker() {
@@ -672,13 +692,6 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 		} else {
 			adapterSettings["frequencySubBand"] = frequencySubBand
 		}
-		//transmissionDataRate
-		if adapterSettings["transmissionDataRate"] != nil {
-			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
-			transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
-		} else {
-			adapterSettings["transmissionDataRate"] = transmissionDataRate
-		}
 	} else {
 		//networkAddress
 		if adapterSettings["networkAddress"] != nil {
@@ -704,14 +717,6 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 			adapterSettings["networkDataKey"] = networkDataKey
 		}
 
-		//transmissionDataRate
-		if adapterSettings["transmissionDataRate"] != nil {
-			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
-			transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
-		} else {
-			adapterSettings["transmissionDataRate"] = transmissionDataRate
-		}
-
 		//transmissionFrequency
 		if adapterSettings["transmissionFrequency"] != nil {
 			log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionFrequency to %s", adapterSettings["transmissionFrequency"].(string)+"\n")
@@ -721,6 +726,29 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 		}
 	}
 
+	//transmissionDataRate
+	if adapterSettings["transmissionDataRate"] != nil {
+		log.Printf("[DEBUG] applyAdapterConfig - Setting transmissionDataRate to %s", adapterSettings["transmissionDataRate"].(string)+"\n")
+		transmissionDataRate = adapterSettings["transmissionDataRate"].(string)
+	} else {
+		adapterSettings["transmissionDataRate"] = transmissionDataRate
+	}
+
+	//transmitPower
+	if adapterSettings["transmitPower"] != nil {
+		log.Printf("[DEBUG] applyAdapterConfig - Setting transmitPower to %s", adapterSettings["transmitPower"].(string)+"\n")
+		transmitPower = adapterSettings["transmitPower"].(string)
+	} else {
+		adapterSettings["transmitPower"] = transmitPower
+	}
+
+	//antennaGain
+	if adapterSettings["antennaGain"] != nil {
+		log.Printf("[DEBUG] applyAdapterConfig - Setting antennaGain to %s", adapterSettings["antennaGain"].(string)+"\n")
+		antennaGain = adapterSettings["antennaGain"].(string)
+	} else {
+		adapterSettings["antennaGain"] = antennaGain
+	}
 }
 
 func setSerialPortName(adapterSettings map[string]interface{}) {

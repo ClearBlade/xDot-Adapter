@@ -148,7 +148,7 @@ func (xDot *XdotSerialPort) GetDeviceID() (string, error) {
 	log.Println("[DEBUG] GetDeviceID - Retrieving device ID")
 
 	if response, err := xDot.SendATCommand(DeviceIDCmd); err != nil {
-		log.Println("[ERROR] GetDeviceID - Error retrieving network join mode: " + err.Error())
+		log.Println("[ERROR] GetDeviceID - Error retrieving device ID: " + err.Error())
 		return "", err
 	} else {
 		return xDot.ExtractResponseData(DeviceIDCmd, response), nil
@@ -376,6 +376,77 @@ func (xDot *XdotSerialPort) SetDataRate(dataRate string) (bool, error) {
 	}
 
 	log.Println("[INFO] SetDataRate - Data transmission (unchanged) = " + dataRate)
+	return false, nil
+}
+
+func (xDot *XdotSerialPort) GetAntennaGain() (string, error) {
+	log.Println("[DEBUG] GetAntennaGain - Retrieving antenna gain")
+
+	response, err := xDot.SendATCommand(AntennaGainCmd)
+	if err != nil {
+		log.Println("[ERROR] GetAntennaGain - Error retrieving antenna gain")
+		return "", err
+	}
+	return xDot.ExtractResponseData(AntennaGainCmd, response), nil
+}
+
+func (xDot *XdotSerialPort) SetAntennaGain(antennaGain string) (bool, error) {
+	log.Println("[DEBUG] SetAntennaGain - Setting antenna gain")
+	//Retrieve the current value. Don't update it if we don't have to
+	currentValue, err := xDot.GetAntennaGain()
+
+	log.Println("[DEBUG] SetAntennaGain - Current value = " + currentValue)
+	log.Println("[DEBUG] SetAntennaGain - Value to set = " + antennaGain)
+
+	if err != nil || !strings.Contains(currentValue, antennaGain) {
+		if err != nil {
+			log.Println("[DEBUG] SetAntennaGain - Error retrieving antenna gain")
+			return false, err
+		}
+		if _, err := xDot.SendATCommand(AntennaGainCmd + "=" + antennaGain); err != nil {
+			log.Println("[DEBUG] SetAntennaGain - Error setting antenna gain")
+			return false, err
+		}
+		log.Println("[INFO] SetAntennaGain - Antenna gain set to " + antennaGain)
+		return true, nil
+	}
+
+	log.Println("[INFO] SetAntennaGain - Antenna gain (unchanged) = " + antennaGain)
+	return false, nil
+}
+
+func (xDot *XdotSerialPort) GetTransmitPower() (string, error) {
+	log.Println("[DEBUG] GetTransmitPower - Retrieving transmit power")
+	response, err := xDot.SendATCommand(TransmitPowerCmd)
+	if err != nil {
+		log.Println("[ERROR] GetTransmitPower - Error retrieving transmit power")
+		return "", err
+	}
+	return xDot.ExtractResponseData(TransmitPowerCmd, response), nil
+}
+
+func (xDot *XdotSerialPort) SetTransmitPower(xmitPower string) (bool, error) {
+	log.Println("[DEBUG] SetTransmitPower - Setting transmit power")
+	//Retrieve the current value. Don't update it if we don't have to
+	currentValue, err := xDot.GetTransmitPower()
+
+	log.Println("[DEBUG] SetTransmitPower - Current value = " + currentValue)
+	log.Println("[DEBUG] SetTransmitPower - Value to set = " + xmitPower)
+
+	if err != nil || !strings.Contains(currentValue, xmitPower) {
+		if err != nil {
+			log.Println("[DEBUG] SetTransmitPower - Error retrieving transmit power")
+			return false, err
+		}
+		if _, err := xDot.SendATCommand(TransmitPowerCmd + "=" + xmitPower); err != nil {
+			log.Println("[DEBUG] SetTransmitPower - Error setting transmit power")
+			return false, err
+		}
+		log.Println("[INFO] SetTransmitPower - Transmit power set to " + xmitPower)
+		return true, nil
+	}
+
+	log.Println("[INFO] SetTransmitPower - Transmit power (unchanged) = " + xmitPower)
 	return false, nil
 }
 

@@ -62,7 +62,9 @@ The adapter_settings column will need to contain a JSON object containing the fo
   "networkSessionKey":"00:11:22:33:00:11:22:33:00:11:22:33:00:11:22:33",  
   "serialPortName":"/dev/ttyAP1",  
   "transmissionDataRate":"DR8",  
-  "transmissionFrequency":"915500000"  
+  "transmissionFrequency":"915500000",
+  "antennaGain": "0",
+  "transmitPower": "20"
 }
 
 

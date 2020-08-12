@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -31,10 +30,10 @@ const (
 	msgPublishQos                  = 0
 	serialRead                     = "receive"
 	serialWrite                    = "send"
-	MTSIO_CMD                      = "mts-io-sysfs"
-	CONDUIT_PRODUCT_ID_PREFIX      = "MTCDT"
-	XDOT_LEGACY_PRODUCT_ID         = "MTAC-MFSER-DTE"
-	XDOT_PRODUCT_ID                = "MTAC-XDOT"
+	mtsIoCmd                       = "mts-io-sysfs"
+	xDotUtilCmd                    = "xdot-util"
+	conduitProductIDPrefix         = "MTCDT"
+	xDotProductID                  = "MTAC-XDOT"
 	adapterConfigCollectionDefault = "adapter_config"
 )
 
@@ -49,10 +48,10 @@ var (
 	initLoRaWANPublic       bool
 	adapterConfigCollection string
 	readInterval            int
-	isReading               bool
-	isWriting               bool
 
-	serialPortName = ""
+	xDotPort        = ""
+	serialPortName  = ""
+	adapterSettings map[string]interface{}
 
 	// peer to peer mode adapter setting defaults
 	networkAddress        = "00:11:22:33"
@@ -65,10 +64,6 @@ var (
 	networkID        = ""
 	networkKey       = ""
 	frequencySubBand = "0"
-
-	//adapter setting defaults common to both peer to peer mode and public ota lora mode
-	antennaGain   = "3"
-	transmitPower = "11"
 
 	topicRoot = "wayside/lora"
 
@@ -103,7 +98,7 @@ func init() {
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
-	flag.IntVar(&readInterval, "readInterval", 10, "The number of seconds to wait before each successive serial port read. (optional)")
+	flag.IntVar(&readInterval, "readInterval", 3, "The number of seconds to wait before each successive serial port read. (optional)")
 	flag.BoolVar(&initLoRaWANPublic, "initLoRaWANPublic", false, "Initialize xdot card to use LoRaWAN Public (optional - peer to peer mode is default)")
 	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The name of the data collection used to house adapter configuration (required)")
 }
@@ -213,38 +208,9 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 
 	//Retrieve adapter configuration data
 	log.Println("[INFO] initCbClient - Retrieving adapter configuration...")
-	adapter_settings := getAdapterConfig()
+	getAdapterConfig()
 
-	if serialPortName == "" {
-		log.Println("[DEBUG] initCbClient - Retrieving serial port name")
-		setSerialPortName(adapter_settings)
-
-		if serialPortName == "" {
-			log.Fatalf("[FATAL] initCbClient - Unable to detect the serial port xDot is using")
-			return errors.New("Unable to detect the serial port xDot is using")
-		}
-	}
-
-	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
-
-	log.Println("[DEBUG] initCbClient - Opening serial port")
-	if err := serialPort.OpenSerialPort(); err != nil {
-		log.Panic("[FATAL] initCbClient - Error opening serial port: " + err.Error())
-	}
-
-	//Turn off serial data mode in case it is currently on
-	if err := serialPort.StopSerialDataMode(); err != nil {
-		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
-	}
-
-	//Initialize xDot network settings and data rate
-	if initLoRaWANPublic {
-		log.Println("[INFO] initCbClient - Configuring xDot for LoRaWAN Public")
-		initXDotLoRaWANPublic()
-	} else {
-		log.Println("[INFO] initCbClient - Configuring xDot for Peer To Peer")
-		initXDotPeerToPeer()
-	}
+	initializeXdot()
 
 	log.Println("[INFO] initCbClient - Initializing MQTT")
 	callbacks := cb.Callbacks{OnConnectionLostCallback: OnConnectLost, OnConnectCallback: OnConnect}
@@ -256,27 +222,55 @@ func initCbClient(platformBroker cbPlatformBroker) error {
 	return nil
 }
 
-//If the connection to the broker is lost, we need to reconnect and
+func initializeXdot() {
+	if serialPortName == "" {
+		log.Println("[DEBUG] initCbClient - Retrieving serial port name")
+		setSerialPortName()
+
+		if serialPortName == "" {
+			log.Fatalf("[FATAL] initCbClient - Unable to detect the serial port xDot is using")
+		}
+	}
+
+	//We need to reset the xDot just to make sure it is in a state where we can proceed
+	resetXdot()
+
+	//Wait 3 seconds for the reset to take place
+	time.Sleep(5 * time.Second)
+
+	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
+
+	log.Println("[DEBUG] initCbClient - Opening serial port")
+	if err := serialPort.OpenSerialPort(); err != nil {
+		log.Panic("[FATAL] initCbClient - Error opening serial port: " + err.Error())
+	}
+
+	//Turn off serial data mode in case it is currently on
+	if err := serialPort.StopSerialDataMode(); err != nil {
+		log.Panic("[FATAL] initCbClient - Error stopping serial data mode: " + err.Error())
+	}
+
+	//Initialize xDot network settings and data rate
+	if initLoRaWANPublic {
+		log.Println("[INFO] initCbClient - Configuring xDot for LoRaWAN Public")
+		initXDotLoRaWANPublic()
+	} else {
+		log.Println("[INFO] initCbClient - Configuring xDot for Peer To Peer")
+		initXDotPeerToPeer()
+	}
+}
+
+//OnConnectLost - If the connection to the broker is lost, we need to reconnect and
 //re-establish all of the subscriptions
 func OnConnectLost(client mqtt.Client, connerr error) {
 	log.Printf("[ERROR] OnConnectLost - Connection to broker was lost: %s\n", connerr.Error())
-
-	//End the existing goRoutines
-	endWorkersChannel <- "Stop Channel"
-	endWorkersChannel <- "Stop Channel"
-
-	//stop serial data mode when adapter is killed
-	log.Println("[INFO] Stopping Serial Data Mode...")
-	if err := serialPort.StopSerialDataMode(); err != nil {
-		log.Println("[WARN] initCbClient - Error stopping serial data mode: " + err.Error())
-	}
 
 	//We can't rely on MQTT auto-reconnect because it is most likely that our auth token expired
 	//When the connection is lost, just exit
 	log.Fatalln("[FATAL] onConnectLost - MQTT Connection was lost. Stopping Adapter to force device reauth.")
 }
 
-//When the connection to the broker is complete, set up the subscriptions
+//OnConnect - When the connection to the broker is complete, set up the subscriptions
 func OnConnect(client mqtt.Client) {
 	log.Println("[INFO] OnConnect - Connected to ClearBlade Platform MQTT broker")
 
@@ -293,11 +287,8 @@ func OnConnect(client mqtt.Client) {
 		cbSubscribeChannel, err = subscribe(topicRoot + "/+/request")
 	}
 
-	isReading = false
-	isWriting = false
-
-	log.Println("[DEBUG] OnConnect - about to flush serial port")
 	//Flush serial port one last time
+	log.Println("[DEBUG] OnConnect - about to flush serial port")
 	if err := serialPort.FlushSerialPort(); err != nil {
 		log.Println("[ERROR] OnConnect - Error flushing serial port: " + err.Error())
 	}
@@ -512,22 +503,26 @@ func initXDotLoRaWANPublic() {
 
 func initXDotCommon() {
 	//Set transmit power
-	log.Println("[INFO] initXDotCommon - Setting transmit power...")
-	if valueChanged, err := serialPort.SetTransmitPower(transmitPower); err != nil {
-		panic(err.Error())
-	} else {
-		if valueChanged == true {
-			serialConfigChanged = true
+	if adapterSettings["transmitPower"] != nil {
+		log.Println("[INFO] initXDotCommon - Setting transmit power...")
+		if valueChanged, err := serialPort.SetTransmitPower(adapterSettings["transmitPower"].(string)); err != nil {
+			panic(err.Error())
+		} else {
+			if valueChanged == true {
+				serialConfigChanged = true
+			}
 		}
 	}
 
 	//Set antenna gain
-	log.Println("[INFO] initXDotCommon - Setting antenna gain...")
-	if valueChanged, err := serialPort.SetAntennaGain(antennaGain); err != nil {
-		panic(err.Error())
-	} else {
-		if valueChanged == true {
-			serialConfigChanged = true
+	if adapterSettings["antennaGain"] != nil {
+		log.Println("[INFO] initXDotCommon - Setting antenna gain...")
+		if valueChanged, err := serialPort.SetAntennaGain(adapterSettings["antennaGain"].(string)); err != nil {
+			panic(err.Error())
+		} else {
+			if valueChanged == true {
+				serialConfigChanged = true
+			}
 		}
 	}
 
@@ -558,7 +553,7 @@ func subscribeWorker() {
 					go readFromSerialPort()
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
 					// If write request...
-					log.Println("[INFO] subscribeWorker - Handling write request...")
+					log.Printf("[INFO] subscribeWorker - Handling write request: %s\n", message.Payload)
 					go writeToSerialPort(string(message.Payload))
 				} else {
 					log.Printf("[DEBUG] subscribeWorker - Unknown request received: topic = %s, payload = %#v\n", message.Topic.Whole, message.Payload)
@@ -576,6 +571,9 @@ func readWorker() {
 	log.Println("[INFO] readWorker - Starting readWorker")
 	ticker := time.NewTicker(time.Duration(readInterval) * time.Second)
 
+	//May need to make sure the go routines are not stacking up
+	//We may need to eventually add code to determine if the mutex is
+	//locked prior to adding another goroutine to read
 	for {
 		select {
 		case <-ticker.C:
@@ -588,6 +586,11 @@ func readWorker() {
 		}
 	}
 }
+
+// func mutexIsLocked(m *sync.Mutex) bool {
+// 	state := reflect.ValueOf(m).Elem().FieldByName("state")
+// 	return state.Int()&mutexLocked == mutexLocked
+// }
 
 // Subscribes to a topic
 func subscribe(topic string) (<-chan *mqttTypes.Publish, error) {
@@ -615,9 +618,7 @@ func publish(topic string, data string) error {
 	return nil
 }
 
-func getAdapterConfig() map[string]interface{} {
-	var settingsJson map[string]interface{}
-
+func getAdapterConfig() {
 	log.Println("[INFO] getAdapterConfig - Retrieving adapter config")
 
 	//Retrieve the adapter configuration row
@@ -646,7 +647,7 @@ func getAdapterConfig() map[string]interface{} {
 			//adapter_settings
 			log.Println("[DEBUG] getAdapterConfig - Retrieving adapter settings...")
 			if results["DATA"].([]interface{})[0].(map[string]interface{})["adapter_settings"] != nil {
-				if err := json.Unmarshal([]byte(results["DATA"].([]interface{})[0].(map[string]interface{})["adapter_settings"].(string)), &settingsJson); err != nil {
+				if err := json.Unmarshal([]byte(results["DATA"].([]interface{})[0].(map[string]interface{})["adapter_settings"].(string)), &adapterSettings); err != nil {
 					log.Printf("[DEBUG] getAdapterConfig - Error while unmarshalling json: %s. Defaulting all adapter settings.\n", err.Error())
 				}
 			} else {
@@ -657,16 +658,14 @@ func getAdapterConfig() map[string]interface{} {
 		}
 	}
 
-	if settingsJson == nil {
-		settingsJson = make(map[string]interface{})
+	if adapterSettings == nil {
+		adapterSettings = make(map[string]interface{})
 	}
 
-	applyAdapterSettings(settingsJson)
-
-	return settingsJson
+	applyAdapterSettings()
 }
 
-func applyAdapterSettings(adapterSettings map[string]interface{}) {
+func applyAdapterSettings() {
 
 	if initLoRaWANPublic {
 		//networkID
@@ -733,39 +732,25 @@ func applyAdapterSettings(adapterSettings map[string]interface{}) {
 	} else {
 		adapterSettings["transmissionDataRate"] = transmissionDataRate
 	}
-
-	//transmitPower
-	if adapterSettings["transmitPower"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting transmitPower to %s", adapterSettings["transmitPower"].(string)+"\n")
-		transmitPower = adapterSettings["transmitPower"].(string)
-	} else {
-		adapterSettings["transmitPower"] = transmitPower
-	}
-
-	//antennaGain
-	if adapterSettings["antennaGain"] != nil {
-		log.Printf("[DEBUG] applyAdapterConfig - Setting antennaGain to %s", adapterSettings["antennaGain"].(string)+"\n")
-		antennaGain = adapterSettings["antennaGain"].(string)
-	} else {
-		adapterSettings["antennaGain"] = antennaGain
-	}
 }
 
-func setSerialPortName(adapterSettings map[string]interface{}) {
+func setSerialPortName() {
 	// 1. Determine if we are running on a Multitech Conduit
-	// 2. Determine which port (ap1 or ap2) has a product ID of MTAC-MFSER-DTE
+	// 2. Determine which port (ap1 or ap2) has a product ID of MTAC-XDOT
 
-	productId := getProductId("")
-	if strings.Contains(productId, CONDUIT_PRODUCT_ID_PREFIX) {
-		log.Printf("[INFO] setSerialPortName - Multitech Conduit detected: %s\n", productId)
+	productID := getProductID("")
+	if strings.Contains(productID, conduitProductIDPrefix) {
+		log.Printf("[INFO] setSerialPortName - Multitech Conduit detected: %s\n", productID)
 		//We are running on a Multitech Conduit. Use ap1 and ap2 as port names
-		portProductID := getProductId("ap1")
-		if strings.Contains(portProductID, XDOT_LEGACY_PRODUCT_ID) || strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+		xDotPort = "ap1"
+		portProductID := getProductID(xDotPort)
+		if strings.Contains(portProductID, xDotProductID) {
 			log.Printf("[INFO] setSerialPortName - XDOT detected on ap1\n")
 			serialPortName = "/dev/ttyAP1"
 		} else {
-			portProductID := getProductId("ap2")
-			if strings.Contains(portProductID, XDOT_LEGACY_PRODUCT_ID) || strings.Contains(portProductID, XDOT_PRODUCT_ID) {
+			xDotPort = "ap2"
+			portProductID := getProductID(xDotPort)
+			if strings.Contains(portProductID, xDotProductID) {
 				log.Printf("[INFO] setSerialPortName - XDOT detected on ap2\n")
 				serialPortName = "/dev/ttyAP2"
 			} else {
@@ -780,7 +765,7 @@ func setSerialPortName(adapterSettings map[string]interface{}) {
 	}
 }
 
-func getProductId(portName string) string {
+func getProductID(portName string) string {
 	port := ""
 	if portName != "" {
 		port += portName + "/"
@@ -791,49 +776,54 @@ func getProductId(portName string) string {
 }
 
 func executeMtsIoCommand(mtsioObject string) string {
-	cmd := exec.Command(MTSIO_CMD, "show", mtsioObject)
+	cmd := exec.Command(mtsIoCmd, "show", mtsioObject)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if err != nil {
 		log.Printf("[ERROR] executeMtsIoCommand - ERROR executing mts-io-sysfs command: %s\n", err.Error())
 		return ""
-	} else {
-		log.Printf("[DEBUG] executeMtsIoCommand - Command response received: %s\n", out.String())
-		return out.String()
 	}
+	log.Printf("[DEBUG] executeMtsIoCommand - Command response received: %s\n", out.String())
+	return out.String()
+}
+
+func resetXdot() string {
+	cmd := exec.Command(xDotUtilCmd, "reset")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("[ERROR] resetXdot - ERROR executing xdot-util command: %s\n", err.Error())
+		return ""
+	}
+	log.Printf("[DEBUG] resetXdot - Command response received: %s\n", out.String())
+	return out.String()
 }
 
 func readFromSerialPort() {
 	// 1. Read all data from serial port
 	// 2. Publish data to platform as string
 	var data string
-
-	// for isWriting {
-	// 	log.Println("[INFO] readFromSerialPort - Currently writing to serial port. Waiting 1 second...")
-	// 	time.Sleep(1 * time.Second)
-	// }
-	log.Println("[DEBUG] readFromSerialPort - About to lock serialPortLock")
 	serialPortLock.Lock()
-	// isReading = true
 	buffer, err := serialPort.ReadSerialPort()
 	for err == nil {
 		data += buffer
 		buffer, err = serialPort.ReadSerialPort()
 	}
 	serialPortLock.Unlock()
-	log.Println("[DEBUG] readFromSerialPort - Just unlocked serialPortLock")
-	// isReading = false
 
 	if err != nil && !strings.Contains(err.Error(), "EOF") {
 		log.Printf("[ERROR] readFromSerialPort - ERROR reading from serial port: %s\n", err.Error())
 	} else {
-		log.Printf("[DEBUG] readFromSerialPort - Data read from serial port: %s\n", data)
-
 		if data != "" {
 			//If there are any slashes in the data, we need to escape them so duktape
 			//doesn't throw a SyntaxError: unterminated string (line 1) error
 			data = strings.Replace(data, `\`, `\\`, -1)
+
+			log.Printf("[INFO] readFromSerialPort - Data read from serial port: %s\n", data)
 
 			//Publish data to message broker
 			err := publish(topicRoot+"/"+serialRead+"/response", data)
@@ -844,23 +834,18 @@ func readFromSerialPort() {
 			log.Println("[DEBUG] readFromSerialPort - No data read from serial port, skipping publish.")
 		}
 	}
+	return
 }
 
 func writeToSerialPort(payload string) {
-	// for isReading {
-	// 	log.Println("[INFO] writeToSerialPort - Currently reading from serial port. Waiting 1 second...")
-	// 	time.Sleep(1 * time.Second)
-	// }
-
 	log.Printf("[INFO] writeToSerialPort - Writing to serial port: %s\n", payload)
-	// isWriting = true
 	log.Println("[DEBUG] writeToSerialPort - About to lock serialPortLock")
 	serialPortLock.Lock()
 	err := serialPort.WriteSerialPort(string(payload))
 	serialPortLock.Unlock()
 	log.Println("[DEBUG] writeToSerialPort - Just unlocked serialPortLock")
-	// isWriting = false
 	if err != nil {
 		log.Printf("[ERROR] writeToSerialPort - ERROR writing to serial port: %s\n", err.Error())
 	}
+	return
 }

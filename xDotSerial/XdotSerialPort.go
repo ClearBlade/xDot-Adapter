@@ -676,30 +676,34 @@ func (xDot *XdotSerialPort) StopSerialDataMode() error {
 	log.Println("[INFO] StopSerialDataMode - Stopping serial data mode")
 
 	err := errors.New("")
-	for err != nil {
+	numTries := 0
+	for err != nil && numTries < 10 {
 		//Flush serial port before attempting to exit serial data mode
 		if err := xDot.FlushSerialPort(); err != nil {
 			log.Println("[ERROR] StopSerialDataMode - Error flushing serial port: " + err.Error())
 		}
 
 		//Send stop command to the serial port
+		//We need to wait 1 second before sending the escape sequence (+++)
+		time.Sleep(1 * time.Second)
 		if err = xDot.sendStopCommand(); err != nil {
 			log.Println("[ERROR] StopSerialDataMode - Error sending stop command: " + err.Error())
 			continue
 		}
 
 		//Wait a few seconds and then continually try to read from the serial port
+		//We need to wait 1 second after sending the escape sequence (+++)
 		time.Sleep(1 * time.Second)
-
 		_, err = xDot.readCommandResponse()
 
 		//Ignore "command not found" errors. These indicate the xDot is not in serial data mode
 		if err != nil && strings.Contains(err.Error(), "Command not found!") {
+			err = nil
 			break
 		}
+		numTries++
 	}
-
-	return nil
+	return err
 }
 
 func (xDot *XdotSerialPort) sendStopCommand() error {
@@ -753,7 +757,7 @@ func (xDot *XdotSerialPort) WriteSerialPort(data string) error {
 		log.Printf("[ERROR] WriteSerialPort - ERROR writing to serial port: %s\n", err.Error())
 		return err
 	} else {
-		log.Printf("[DEBUG] SendATCommand - Number of bytes written: %d\n", n)
+		log.Printf("[DEBUG] WriteSerialPort - Number of bytes written: %d\n", n)
 	}
 	return nil
 }

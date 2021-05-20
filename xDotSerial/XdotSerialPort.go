@@ -2,6 +2,7 @@ package xDotSerial
 
 import (
 	"errors"
+	"io"
 	"log"
 	"strings"
 	"time"
@@ -99,9 +100,7 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 	numTries := 1
 
 	buff, err := xDot.ReadSerialPort()
-	if err != nil && strings.Contains(err.Error(), "EOF") {
-		log.Println("[INFO] readCommandResponse - EOF Error reading serial data...")
-	} else if err != nil {
+	if err != nil && err != io.EOF {
 		log.Println("[FATAL] readCommandResponse - Error Reading serial data response from serial port: " + err.Error())
 		panic(err.Error())
 	}
@@ -117,7 +116,7 @@ func (xDot *XdotSerialPort) readCommandResponse() (string, error) {
 		time.Sleep(sleepTime)
 
 		buff, err = xDot.ReadSerialPort()
-		if err != nil && strings.Contains(err.Error(), "EOF") {
+		if err != nil && err == io.EOF {
 			numTries++
 			continue
 		} else if err != nil {
@@ -735,20 +734,37 @@ func (xDot *XdotSerialPort) sendStopCommand() error {
 }
 
 func (xDot *XdotSerialPort) ReadSerialPort() (string, error) {
-	buff := make([]byte, 128)
-	n, err := xDot.serialPort.Read(buff)
+	var n int
+	var err error
 
-	if err != nil {
-		if !strings.Contains(err.Error(), "EOF") {
-			log.Println("[ERROR] readSerialPort - Error Reading from serial port: " + err.Error())
-		} else {
-			log.Println("[DEBUG] readSerialPort - EOF returned when reading from serial port: " + err.Error())
+	buf := make([]byte, 128)
+	incomingData := ""
+
+	for {
+		n, err = xDot.serialPort.Read(buf)
+		if err != nil { // err will equal io.EOF if there is no data to read
+			break
 		}
-		return "", err
+		log.Println("[DEBUG] readSerialPort - Data read: " + string(buf))
+		log.Printf("[DEBUG] readSerialPort - Number of bytes read: %d\n", n)
+		if n > 0 {
+			incomingData += string(buf[:n])
+		}
 	}
 
-	log.Printf("[DEBUG] readSerialPort - Number of bytes read: %d\n", n)
-	return string(buff[:n]), nil
+	if n > 0 {
+		incomingData += string(buf[:n])
+	}
+
+	log.Println("[DEBUG] readSerialPort - Done reading")
+
+	if err != nil {
+		if err != io.EOF {
+			log.Println("[ERROR] readSerialPort - Error Reading from serial port: " + err.Error())
+		}
+	}
+
+	return incomingData, err
 }
 
 func (xDot *XdotSerialPort) WriteSerialPort(data string) error {

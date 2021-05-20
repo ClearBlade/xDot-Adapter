@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -48,6 +49,7 @@ var (
 	initLoRaWANPublic       bool
 	adapterConfigCollection string
 	readInterval            int
+	readTimeout             int
 
 	xDotPort        = ""
 	serialPortName  = ""
@@ -98,7 +100,8 @@ func init() {
 	flag.StringVar(&platformURL, "platformURL", platURL, "platform url (optional)")
 	flag.StringVar(&messagingURL, "messagingURL", messURL, "messaging URL (optional)")
 	flag.StringVar(&logLevel, "logLevel", "info", "The level of logging to use. Available levels are 'debug, 'info', 'warn', 'error', 'fatal' (optional)")
-	flag.IntVar(&readInterval, "readInterval", 3, "The number of seconds to wait before each successive serial port read. (optional)")
+	flag.IntVar(&readInterval, "readInterval", 3, "The number of seconds to wait before each successive serial port read. (DEPRECATED - NO LONGER USED)")
+	flag.IntVar(&readTimeout, "readTimeout", 500, "The number of milliesconds to wait before timing out the serial port read.")
 	flag.BoolVar(&initLoRaWANPublic, "initLoRaWANPublic", false, "Initialize xdot card to use LoRaWAN Public (optional - peer to peer mode is default)")
 	flag.StringVar(&adapterConfigCollection, "adapterConfigCollection", adapterConfigCollectionDefault, "The name of the data collection used to house adapter configuration (required)")
 }
@@ -235,10 +238,10 @@ func initializeXdot() {
 	//We need to reset the xDot just to make sure it is in a state where we can proceed
 	resetXdot()
 
-	//Wait 3 seconds for the reset to take place
+	//Wait for the reset to take place
 	time.Sleep(5 * time.Second)
 
-	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*2500)
+	serialPort = xDotSerial.CreateXdotSerialPort(serialPortName, 115200, time.Millisecond*time.Duration(readTimeout))
 
 	log.Println("[DEBUG] initCbClient - Opening serial port")
 	if err := serialPort.OpenSerialPort(); err != nil {
@@ -550,11 +553,11 @@ func subscribeWorker() {
 				//Determine if a read or write request was received
 				if strings.HasSuffix(message.Topic.Whole, serialRead+"/request") {
 					log.Println("[INFO] subscribeWorker - Handling read request...")
-					go readFromSerialPort()
+					go readWithLock()
 				} else if strings.HasSuffix(message.Topic.Whole, serialWrite+"/request") {
 					// If write request...
-					log.Printf("[INFO] subscribeWorker - Handling write request: %s\n", message.Payload)
-					go writeToSerialPort(string(message.Payload))
+					log.Printf("[INFO] subscribeWorker - Handling write request\n")
+					go writeWithLock(string(message.Payload))
 				} else {
 					log.Printf("[DEBUG] subscribeWorker - Unknown request received: topic = %s, payload = %#v\n", message.Topic.Whole, message.Payload)
 				}
@@ -569,28 +572,17 @@ func subscribeWorker() {
 
 func readWorker() {
 	log.Println("[INFO] readWorker - Starting readWorker")
-	ticker := time.NewTicker(time.Duration(readInterval) * time.Second)
 
-	//May need to make sure the go routines are not stacking up
-	//We may need to eventually add code to determine if the mutex is
-	//locked prior to adding another goroutine to read
 	for {
 		select {
-		case <-ticker.C:
-			log.Println("[DEBUG] readWorker - Reading from serial port")
-			go readFromSerialPort()
 		case <-endWorkersChannel:
-			log.Println("[DEBUG] readWorker - stopping ticker")
-			ticker.Stop()
+			log.Println("[DEBUG] readWorker - stopping read worker")
 			return
+		default:
+			readWithLock()
 		}
 	}
 }
-
-// func mutexIsLocked(m *sync.Mutex) bool {
-// 	state := reflect.ValueOf(m).Elem().FieldByName("state")
-// 	return state.Int()&mutexLocked == mutexLocked
-// }
 
 // Subscribes to a topic
 func subscribe(topic string) (<-chan *mqttTypes.Publish, error) {
@@ -803,19 +795,26 @@ func resetXdot() string {
 	return out.String()
 }
 
+func readWithLock() {
+	serialPortLock.Lock()
+	defer serialPortLock.Unlock()
+
+	readFromSerialPort()
+}
+
+func writeWithLock(payload string) {
+	serialPortLock.Lock()
+	defer serialPortLock.Unlock()
+
+	writeToSerialPort(payload)
+}
+
 func readFromSerialPort() {
 	// 1. Read all data from serial port
 	// 2. Publish data to platform as string
-	var data string
-	serialPortLock.Lock()
-	buffer, err := serialPort.ReadSerialPort()
-	for err == nil {
-		data += buffer
-		buffer, err = serialPort.ReadSerialPort()
-	}
-	serialPortLock.Unlock()
+	data, err := serialPort.ReadSerialPort()
 
-	if err != nil && !strings.Contains(err.Error(), "EOF") {
+	if err != nil && err != io.EOF {
 		log.Printf("[ERROR] readFromSerialPort - ERROR reading from serial port: %s\n", err.Error())
 	} else {
 		if data != "" {
@@ -840,9 +839,8 @@ func readFromSerialPort() {
 func writeToSerialPort(payload string) {
 	log.Printf("[INFO] writeToSerialPort - Writing to serial port: %s\n", payload)
 	log.Println("[DEBUG] writeToSerialPort - About to lock serialPortLock")
-	serialPortLock.Lock()
+
 	err := serialPort.WriteSerialPort(string(payload))
-	serialPortLock.Unlock()
 	log.Println("[DEBUG] writeToSerialPort - Just unlocked serialPortLock")
 	if err != nil {
 		log.Printf("[ERROR] writeToSerialPort - ERROR writing to serial port: %s\n", err.Error())
